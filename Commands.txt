@@ -1,0 +1,49 @@
+mkdir backend
+
+python 3.11
+
+
+cd backend
+python -m venv venv (Virtual envirment)
+venv\Scripts\activate (Open virual enviment)
+pip install flask flask-mongoengine
+pip install flask pymongo flask-bcrypt PyJWT
+pip install -r requirements.txt
+pip install Flask-CORS
+pip freeze > requirements.txt (Save Dependencies)
+pip show flask
+pip uninstall flask
+
+pip install flask-jwt-extended==4.5.3 PyJWT==2.8.0 flask-cors==4.0.0
+
+pip install Flask==2.3.3 Werkzeug==2.3.7 Jinja2==3.1.2 MarkupSafe==2.1.3 itsdangerous==2.1.2 click==8.1.7
+
+pip install opencv-python-headless==4.8.1.78 Pillow==10.0.1 pytesseract==0.3.10
+--showing issue 
+  python -m pip install --upgrade pip setuptools wheel
+  pip install Pillow
+  pip install opencv-python-headless==4.8.1.78
+  pip install --only-binary=all sentence-transformers==2.2.2 transformers==4.30.2 tokenizers==0.13.3 numpy==1.24.3 scikit-learn==1.3.0
+  pip install reportlab==4.0.4 python-dateutil==2.8.2 requests==2.31.0 python-dotenv==1.0.0
+  pip install --upgrade sentence-transformers huggingface_hub
+
+pip install torch==2.0.1 --index-url https://download.pytorch.org/whl/cpu
+pip install torch --upgrade
+pip install torch==2.0.1
+pip install transformers==4.30.2 huggingface_hub==0.14.1
+
+
+
+python app.py (Run File)
+pip install pymongo
+pip install flask-pymongo
+pip install bcrypt
+python -m pip install --upgrade pip
+
+
+
+adb reverse tcp:5000 tcp:5000
+adb reverse --list
+--You should see: 5000 tcp:5000 tcp:5000
+
+npm start -- --reset-cache

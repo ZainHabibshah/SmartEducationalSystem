@@ -1,0 +1,75 @@
+############################
+# Node / React Native / Expo
+############################
+
+node_modules/
+npm-debug.log*
+yarn-error.log*
+pnpm-lock.yaml
+package-lock.json
+
+.expo/
+.expo-shared/
+
+# Metro / bundler cache
+.cache/
+
+############################
+# Python / Flask backend
+############################
+
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+
+# ChromaDB local database
+chroma_db/
+Backend/chroma_db/
+
+############################
+# Environment & secrets
+############################
+
+.env
+.env.*
+*.env.local
+
+############################
+# Build / dist / coverage
+############################
+
+dist/
+build/
+.next/
+coverage/
+
+############################
+# Logs & temp files
+############################
+
+logs/
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo
+
+############################
+# OS / Editor junk
+############################
+
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+.vscode/
+.idea/
+*.iml
+
