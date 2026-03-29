@@ -1580,7 +1580,7 @@ def generate_quiz():
 
         # Try using FREE Groq API first (no subscription needed!)
         import os
-        groq_api_key = os.getenv('GROQ_API_KEY', '') or "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"
+        groq_api_key = os.getenv('GROQ_API_KEY', '') 
         
         if groq_api_key:
             try:
