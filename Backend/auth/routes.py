@@ -2095,7 +2095,7 @@ def send_quiz_to_class():
         # Generate quiz using LLM
         try:
             # Try to get from environment, otherwise use hardcoded key
-            groq_api_key = os.environ.get("GROQ_API_KEY") or "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"
+            groq_api_key = os.environ.get("GROQ_API_KEY")
             
             if not groq_api_key:
                 print("⚠️  GROQ_API_KEY not found")
