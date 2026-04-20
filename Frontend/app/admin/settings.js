@@ -91,10 +91,35 @@ export default function SettingsScreen() {
         }
     };
 
-    const handleChangePassword = () => {
-        if (!currentPassword || !newPassword || newPassword !== confirmPassword) return;
-        // TODO: integrate with backend
-        console.log('Change password');
+    const handleChangePassword = async () => {
+        if (!currentPassword || !newPassword || !confirmPassword) {
+            Alert.alert('Error', 'Please fill all password fields');
+            return;
+        }
+        if (newPassword.length < 6) {
+            Alert.alert('Error', 'New password must be at least 6 characters');
+            return;
+        }
+        if (newPassword !== confirmPassword) {
+            Alert.alert('Error', 'New password and confirm password do not match');
+            return;
+        }
+
+        setIsSaving(true);
+        try {
+            const result = await apiService.changePassword(currentPassword, newPassword);
+            if (result && result.message) {
+                Alert.alert('Success', 'Password updated successfully!');
+                setCurrentPassword('');
+                setNewPassword('');
+                setConfirmPassword('');
+            }
+        } catch (error) {
+            console.error('Error changing password:', error);
+            Alert.alert('Error', error.error || error.message || 'Failed to change password');
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     const handleLogout = async () => {
@@ -210,8 +235,17 @@ export default function SettingsScreen() {
                         <Text style={styles.label}>Confirm New Password</Text>
                         <TextInput style={styles.input} value={confirmPassword} onChangeText={setConfirmPassword} placeholder="Confirm new password" placeholderTextColor="#A9B8A8" secureTextEntry />
                     </View>
-                    <TouchableOpacity style={styles.primaryBtn} onPress={handleChangePassword} activeOpacity={0.9}>
-                        <Text style={styles.primaryBtnText}>Update Password</Text>
+                    <TouchableOpacity
+                        style={[styles.primaryBtn, isSaving && styles.disabledBtn]}
+                        onPress={handleChangePassword}
+                        activeOpacity={0.9}
+                        disabled={isSaving}
+                    >
+                        {isSaving ? (
+                            <ActivityIndicator size="small" color={COLORS.buttonText} />
+                        ) : (
+                            <Text style={styles.primaryBtnText}>Update Password</Text>
+                        )}
                     </TouchableOpacity>
                 </View>
 

@@ -462,6 +462,19 @@ class ApiService {
     }
   }
 
+  async changePassword(currentPassword, newPassword) {
+    try {
+      const result = await this.axiosInstance.put('/auth/change-password', {
+        current_password: currentPassword,
+        new_password: newPassword,
+      });
+      return result;
+    } catch (error) {
+      console.error('Change password error:', error);
+      throw error;
+    }
+  }
+
   async getStudentProfile() {
     try {
       const result = await this.axiosInstance.get('/auth/get-student-profile');

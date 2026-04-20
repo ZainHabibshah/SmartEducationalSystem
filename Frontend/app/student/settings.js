@@ -171,7 +171,7 @@ export default function StudentSettingsScreen() {
         }
 
         try {
-            const result = await apiService.updateProfile({ password: newPassword });
+            const result = await apiService.changePassword(currentPassword, newPassword);
             if (result && result.message) {
                 showModal('Password Changed', 'Your password has been updated successfully.', 'success');
                 setCurrentPassword('');

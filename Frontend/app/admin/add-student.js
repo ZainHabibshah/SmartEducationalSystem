@@ -28,6 +28,7 @@ export default function AddStudentScreen() {
         fatherName: '',
         address: '',
         pastSchool: '',
+        // Store digits only; UI always shows fixed +92 prefix
         phoneNumber: '',
         email: '',
         password: '',
@@ -94,12 +95,16 @@ export default function AddStudentScreen() {
             return;
         }
 
-        // Validate phone number format
-        const phoneRegex = /^\+92-\d{3}-\d{7}$/;
-        if (!phoneRegex.test(formData.phoneNumber.trim())) {
+        // Validate phone number format (digits only; +92 is fixed in UI)
+        const phoneDigits = (formData.phoneNumber || '').replace(/\D/g, '');
+        // Pakistan mobile without +92 is 10 digits starting with 3XXXXXXXXX
+        const phoneRegex = /^3\d{9}$/;
+        const fullPhone = `+92${phoneDigits}`;
+        // Full number must be exactly like +923XXXXXXXXX (13 chars including '+')
+        if (!phoneRegex.test(phoneDigits) || fullPhone.length !== 13) {
             setConfirmationVariant('error');
             setConfirmationTitle('Submission Rejected');
-            setConfirmationMessage('Please enter phone number in format: +92-XXX-XXXXXXX');
+            setConfirmationMessage('Please enter a Pakistani number in format: +923XXXXXXXXX (example: +923189043757). “+92” is fixed; enter 10 digits starting with 3.');
             setShowConfirmationModal(true);
             return;
         }
@@ -120,7 +125,7 @@ export default function AddStudentScreen() {
             father_name: formData.fatherName.trim(),
             address: formData.address.trim(),
             past_school: formData.pastSchool.trim(),
-            phone: formData.phoneNumber.trim(),
+            phone: fullPhone,
             email: formData.email.trim(),
             password: formData.password, // Don't trim password - keep original
         };
@@ -445,15 +450,25 @@ export default function AddStudentScreen() {
                     {/* Phone Number */}
                     <View style={styles.inputGroup}>
                         <Text style={styles.inputLabel}>Phone Number *</Text>
-                        <TextInput
-                            style={styles.input}
-                            value={formData.phoneNumber}
-                            onChangeText={(value) => handleInputChange('phoneNumber', value)}
-                            placeholder="+92-XXX-XXXXXXX"
-                            placeholderTextColor={COLORS.link}
-                            keyboardType="phone-pad"
-                        />
-                        <Text style={styles.helpText}>Format: +92-XXX-XXXXXXX (e.g., +92-300-1234567)</Text>
+                        <View style={styles.phoneRow}>
+                            <View style={styles.phonePrefix}>
+                                <Text style={styles.phonePrefixText}>+92</Text>
+                            </View>
+                            <TextInput
+                                style={styles.phoneInput}
+                                value={formData.phoneNumber}
+                                onChangeText={(value) => {
+                                    // Admin may type 0318...; drop leading 0 so it becomes 318...
+                                    const rawDigits = (value || '').replace(/\D/g, '');
+                                    const normalized = rawDigits.replace(/^0+/, '').slice(0, 10);
+                                    handleInputChange('phoneNumber', normalized);
+                                }}
+                                placeholder="3001234567"
+                                placeholderTextColor={COLORS.link}
+                                keyboardType="phone-pad"
+                            />
+                        </View>
+                        <Text style={styles.helpText}>Format will be `+92` + 10 digits (example: +923189043757). If you type 0318..., 0 will be removed automatically.</Text>
                     </View>
 
                     {/* Email */}
@@ -615,6 +630,41 @@ const styles = StyleSheet.create({
         borderWidth: 2,
         borderColor: COLORS.inputBg,
         textAlignVertical: 'top',
+    },
+    phoneRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+    },
+    phonePrefix: {
+        height: 54,
+        minWidth: 76,
+        borderWidth: 2,
+        borderColor: COLORS.inputBg,
+        borderRadius: 15,
+        backgroundColor: '#F8F9FA',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 14,
+    },
+    phonePrefixText: {
+        fontFamily: 'Outfit',
+        fontSize: 16,
+        color: COLORS.inputBg,
+        fontWeight: '700',
+    },
+    phoneInput: {
+        flex: 1,
+        fontFamily: 'Outfit',
+        fontSize: 16,
+        color: COLORS.inputBg,
+        backgroundColor: '#F8F9FA',
+        borderRadius: 15,
+        paddingVertical: 15,
+        paddingHorizontal: 20,
+        borderWidth: 2,
+        borderColor: COLORS.inputBg,
+        height: 54,
     },
     helpText: {
         fontFamily: 'Outfit',

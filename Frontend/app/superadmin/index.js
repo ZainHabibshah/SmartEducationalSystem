@@ -76,39 +76,9 @@ export default function SuperAdminDashboard() {
     }
   };
 
-  const belowNews = (
-    <View style={styles.actionRow}>
-      <TouchableOpacity
-        style={[styles.actionCard, styles.actionCardLeft]}
-        activeOpacity={0.88}
-        onPress={() => router.push('/superadmin/all-students')}
-      >
-        <View style={[styles.actionIconWrap, { backgroundColor: 'rgba(3,4,94,0.08)' }]}>
-          <Ionicons name="people" size={26} color={COLORS.navy} />
-        </View>
-        <Text style={styles.actionTitle}>Students</Text>
-        <Text style={styles.actionHint}>All subjects · class & details</Text>
-        <View style={styles.actionChevron}>
-          <Ionicons name="chevron-forward" size={18} color={COLORS.navy} />
-        </View>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[styles.actionCard, styles.actionCardRight]}
-        activeOpacity={0.88}
-        onPress={() => router.push('/superadmin/global-leaderboard')}
-      >
-        <View style={[styles.actionIconWrap, { backgroundColor: 'rgba(255,193,7,0.15)' }]}>
-          <Ionicons name="podium" size={26} color={COLORS.navy} />
-        </View>
-        <Text style={styles.actionTitle}>Leaderboard</Text>
-        <Text style={styles.actionHint}>All subjects · global ranks</Text>
-        <View style={styles.actionChevron}>
-          <Ionicons name="chevron-forward" size={18} color={COLORS.navy} />
-        </View>
-      </TouchableOpacity>
-    </View>
-  );
+  // Intentionally removed "Students" and "Leaderboard" quick-actions
+  // from the Super Admin dashboard per requirements.
+  const belowNews = null;
 
   if (loading) {
     return <ActivityIndicator style={{ flex: 1 }} />;
@@ -127,10 +97,12 @@ export default function SuperAdminDashboard() {
       onPressCard={(key) => {
         if (key === 'assignTeacher') router.push('/superadmin/assign-teacher');
       }}
-      gridItems={[
-        { key: 'assignTeacher', icon: 'people', label: 'Assign / Replace Teacher' },
-      ]}
-      centerButton={null}
+      gridItems={[]}
+      centerButton={{
+        icon: 'people',
+        label: 'Assign / Replace Teacher',
+        onPress: () => router.push('/superadmin/assign-teacher'),
+      }}
       footerButton={null}
       bottomIcons={[
         { key: 'home', icon: 'home', onPress: () => router.push('/superadmin') },
