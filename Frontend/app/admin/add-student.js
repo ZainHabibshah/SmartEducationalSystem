@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
@@ -21,6 +22,7 @@ const { width, height } = Dimensions.get('window');
 
 export default function AddStudentScreen() {
     const router = useRouter();
+    const [basePath, setBasePath] = useState('/admin');
     const [formData, setFormData] = useState({
         fullName: '',
         fatherName: '',
@@ -43,6 +45,14 @@ export default function AddStudentScreen() {
     const fadeAnim = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
+        (async () => {
+            try {
+                setBasePath('/admin');
+            } catch {
+                setBasePath('/admin');
+            }
+        })();
+
         Animated.parallel([
             Animated.timing(slideAnim, {
                 toValue: 0,
@@ -339,7 +349,7 @@ export default function AddStudentScreen() {
         setShowConfirmationModal(false);
         // Always navigate to students list after closing confirmation modal (whether success or error)
         // This ensures admin sees the updated student list
-        router.push('/admin/students');
+        router.push(`${basePath}/students`);
     };
 
     // OTP flow removed for add-student; backend is protected by admin JWT.

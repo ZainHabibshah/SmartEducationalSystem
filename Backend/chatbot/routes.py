@@ -8,12 +8,35 @@ import os
 from database import connect_to_mongodb, get_course_collection
 from chatbot.rag_pipeline import RAGPipeline
 import traceback
+import re
 
 # Create Blueprint
 chatbot_bp = Blueprint('chatbot', __name__)
 
 # Initialize RAG pipeline (singleton)
 rag_pipeline = None
+
+def _normalize_intent(value: str):
+    v = (value or "").strip().lower()
+    if v in {"timetable", "course", "student", "ai"}:
+        return v
+    return None
+
+def _parse_intent_command(question: str):
+    """
+    Parse a leading slash command:
+    /timetable, /course, /student
+    Allows punctuation after command (e.g., '/course,'), and returns (intent, remaining_text).
+    """
+    raw = (question or "")
+    left = raw.lstrip()
+    m = re.match(r"^/(timetable|course|student|ai)\b", left, flags=re.IGNORECASE)
+    if not m:
+        return None, raw
+    intent = (m.group(1) or "").lower()
+    remaining = left[m.end():]
+    remaining = re.sub(r"^[\s,.;:!?-]+", "", remaining).strip()
+    return intent, remaining
 
 def get_rag_pipeline():
     """Get or create RAG pipeline instance"""
@@ -25,12 +48,6 @@ def get_rag_pipeline():
             chroma_db_path = os.path.join(BASE_DIR, 'chroma_db')
             
             rag_pipeline = RAGPipeline(chroma_db_path=chroma_db_path)
-            
-            # Load embeddings on startup (from existing embedding files, will be stored in ChromaDB)
-            # Load timetable embeddings
-            timetable_embeddings_folder = os.path.join(BASE_DIR, 'embeddings', 'timetables')
-            if os.path.exists(timetable_embeddings_folder):
-                rag_pipeline.load_timetable_embeddings(timetable_embeddings_folder)
             
             # Load schedules embeddings
             schedules_embeddings_folder = os.path.join(BASE_DIR, 'embeddings', 'schedules')
@@ -51,26 +68,44 @@ def chat():
         current_user = get_jwt_identity()
         user_email = current_user.get('email')
         user_role = current_user.get('role')
+        user_name = current_user.get('name', 'User')
+        token_course = current_user.get('course')
         
         data = request.get_json()
         if not data:
             return jsonify({"error": "Invalid request payload"}), 400
         
         question = data.get('question', '').strip()
+        body_intent = _normalize_intent(data.get('intent'))
         if not question:
             return jsonify({"error": "Question is required"}), 400
+        if len(question) > 1200:
+            return jsonify({"error": "Question is too long"}), 400
+
+        if user_role not in {'admin', 'student'}:
+            return jsonify({"error": "Unauthorized role for chatbot access"}), 403
+
+        cmd_intent, question_after_cmd = _parse_intent_command(question)
+        effective_intent = cmd_intent or body_intent
+        question = question_after_cmd if cmd_intent else question
         
         # Get user's course (for students and admins)
         user_course = None
         db = connect_to_mongodb()
+        if db is None:
+            return jsonify({"error": "Database connection failed"}), 500
+
+        # Prefer JWT course to avoid extra DB lookup.
+        if token_course:
+            user_course = token_course
         
-        if user_role == 'admin':
-            # Get admin's course
+        if user_role == 'admin' and not user_course:
+            # Teacher (role 'admin'): Get their course from `admin` collection
             admin_collection = db.admin
             admin = admin_collection.find_one({"email": user_email})
             if admin:
                 user_course = admin.get('course')
-        elif user_role == 'student':
+        elif user_role == 'student' and not user_course:
             # Get student's course from their document
             # Try to find student in any course collection
             for course_key in ['computerScience', 'chemistry', 'physics']:
@@ -86,19 +121,13 @@ def chat():
         # Get RAG pipeline
         pipeline = get_rag_pipeline()
         
-        # Reload embeddings if needed (for timetable and schedules)
-        # Note: Once loaded into ChromaDB, they persist. Only reload if embedding files are updated.
+        # Reload embeddings if needed (schedules only).
         BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        timetable_embeddings_folder = os.path.join(BASE_DIR, 'embeddings', 'timetables')
         schedules_embeddings_folder = os.path.join(BASE_DIR, 'embeddings', 'schedules')
         os.makedirs(schedules_embeddings_folder, exist_ok=True)
         
-        # Only reload if stores are not initialized (first time) or if files are newer
-        # For now, we'll reload on each request to ensure latest data (can be optimized later)
-        if not pipeline.timetable_store:
-            pipeline.load_timetable_embeddings(timetable_embeddings_folder)
-        if not pipeline.schedules_store:
-            pipeline.load_schedules_embeddings(schedules_embeddings_folder)
+        # Rebuild schedules vectors each request so vectors stay in sync after upload/delete.
+        pipeline.load_schedules_embeddings(schedules_embeddings_folder)
         
         # Answer the question
         result = pipeline.answer_question(
@@ -106,14 +135,17 @@ def chat():
             user_email=user_email,
             user_role=user_role,
             user_course=user_course,
-            db=db
+            db=db,
+            user_name=user_name,
+            intent=effective_intent,
         )
         
         return jsonify({
             "success": True,
             "answer": result.get("answer", "I couldn't process your question."),
             "query_type": result.get("query_type", "unknown"),
-            "sources": result.get("sources", [])
+            "sources": result.get("sources", []),
+            "intent": effective_intent,
         }), 200
     
     except Exception as e:
@@ -121,7 +153,7 @@ def chat():
         traceback.print_exc()
         return jsonify({
             "error": "Server error while processing your question",
-            "message": str(e)
+            "message": "internal_error"
         }), 500
 
 @chatbot_bp.route('/health', methods=['GET'])
@@ -129,14 +161,19 @@ def chatbot_health_check():
     """Health check endpoint for chatbot service"""
     try:
         pipeline = get_rag_pipeline()
+        groq_key = getattr(pipeline, "_groq_api_key", None)
+        vector_counts = pipeline.get_vector_counts() if pipeline else {"timetable": 0, "schedules": 0, "attendance": 0}
         status = {
             "status": "healthy",
             "service": "chatbot",
             "embeddings_available": pipeline.embeddings is not None,
             "llm_available": pipeline.llm is not None,
+            "groq_api_configured": bool(groq_key),
+            "groq_http_fallback": bool(groq_key),
             "timetable_store_loaded": pipeline.timetable_store is not None,
             "schedules_store_loaded": pipeline.schedules_store is not None,
-            "attendance_store_loaded": pipeline.attendance_store is not None
+            "attendance_store_loaded": pipeline.attendance_store is not None,
+            "vector_counts": vector_counts,
         }
         return jsonify(status), 200
     except Exception as e:

@@ -193,8 +193,11 @@ export default function StudentQuizScreen() {
             console.log('✅ Quiz result saved');
         } catch (error) {
             console.error('❌ Error saving quiz result:', error);
+            alert('Quiz submitted, but saving result failed. Please check your connection and try again.');
         }
-        
+    };
+
+    const showResultAfterReview = () => {
         setQuizModalVisible(false);
         setResultModalVisible(true);
     };
@@ -237,7 +240,7 @@ export default function StudentQuizScreen() {
                 <TouchableOpacity style={styles.customBackButton} onPress={handleBack} activeOpacity={0.8}>
                     <Ionicons name="arrow-back" size={22} color={COLORS.inputBg} />
                 </TouchableOpacity>
-                <Text style={styles.customHeaderTitle}>Quiz</Text>
+                <Text style={styles.customHeaderTitle}>Quizz</Text>
                 <View style={styles.headerPlaceholder} />
             </View>
 
@@ -358,7 +361,7 @@ export default function StudentQuizScreen() {
             />
 
             {/* Quiz Modal */}
-            <Modal visible={quizModalVisible} animationType="slide" transparent>
+            <Modal visible={quizModalVisible} animationType="slide" transparent={false}>
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalCard}>
                         <View style={styles.modalHeader}>
@@ -373,7 +376,12 @@ export default function StudentQuizScreen() {
                         <View style={styles.modalTimerRow}>
                             <TimerDonut totalSeconds={600} running={quizModalVisible} onComplete={onTimeUp} />
                         </View>
-                        <ScrollView style={styles.modalBody} contentContainerStyle={{ paddingBottom: 12 }}>
+                        <ScrollView
+                            style={styles.modalBody}
+                            contentContainerStyle={styles.modalBodyContent}
+                            showsVerticalScrollIndicator
+                            keyboardShouldPersistTaps="handled"
+                        >
                             {questions.map((q) => {
                                 const userAnswer = answers[q.id];
                                 const isCorrect = userAnswer === q.correctIndex;
@@ -434,21 +442,29 @@ export default function StudentQuizScreen() {
                                 );
                             })}
                         </ScrollView>
-                        {!showCorrectAnswers && (
-                            <TouchableOpacity style={styles.uploadBtn} onPress={submitQuiz} activeOpacity={0.85}>
-                                <View style={styles.uploadGradient}>
-                                    <Ionicons name="checkmark-done" size={20} color="#fff" />
-                                    <Text style={styles.uploadBtnText}>Submit Quiz</Text>
-                                </View>
-                            </TouchableOpacity>
-                        )}
+                        <TouchableOpacity
+                            style={styles.uploadBtn}
+                            onPress={showCorrectAnswers ? showResultAfterReview : submitQuiz}
+                            activeOpacity={0.85}
+                        >
+                            <View style={styles.uploadGradient}>
+                                <Ionicons
+                                    name={showCorrectAnswers ? "bar-chart" : "checkmark-done"}
+                                    size={20}
+                                    color="#fff"
+                                />
+                                <Text style={styles.uploadBtnText}>
+                                    {showCorrectAnswers ? 'View Result' : 'Submit Quiz'}
+                                </Text>
+                            </View>
+                        </TouchableOpacity>
                     </View>
                 </View>
             </Modal>
 
             {/* Result Modal */}
             <Modal visible={resultModalVisible} animationType="fade" transparent>
-                <View style={styles.modalOverlay}>
+                <View style={styles.resultOverlay}>
                     <View style={styles.resultCard}>
                         <View
                             style={[
@@ -458,10 +474,11 @@ export default function StudentQuizScreen() {
                         >
                             <Ionicons
                                 name={score >= 8 ? 'trophy' : score >= 5 ? 'ribbon' : 'sad'}
-                                size={64}
+                                size={54}
                                 color="#fff"
                             />
                             <Text style={styles.resultTitle}>Quiz Completed!</Text>
+                            <Text style={styles.resultTopic}>{selectedTopic || 'Quiz Result'}</Text>
                             <Text style={styles.resultScore}>
                                 {score}/{questions.length}
                             </Text>
@@ -711,22 +728,17 @@ const styles = StyleSheet.create({
     },
     modalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 16,
+        backgroundColor: '#fff',
+        paddingTop: Platform.select({ ios: 50, android: 24 }),
     },
     modalCard: {
+        flex: 1,
         width: '100%',
-        maxHeight: '90%',
+        height: '100%',
         backgroundColor: '#fff',
-        borderRadius: 20,
+        borderTopLeftRadius: 18,
+        borderTopRightRadius: 18,
         overflow: 'hidden',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.3,
-        shadowRadius: 16,
-        elevation: 10,
     },
     modalHeader: {
         flexDirection: 'row',
@@ -757,12 +769,15 @@ const styles = StyleSheet.create({
     modalTimerRow: {
         alignItems: 'center',
         justifyContent: 'center',
-        paddingVertical: 16,
+        paddingVertical: 10,
         backgroundColor: '#f8f9fa',
     },
     modalBody: {
         paddingHorizontal: 16,
         flex: 1,
+    },
+    modalBodyContent: {
+        paddingBottom: 20,
     },
     questionBlock: {
         paddingVertical: 16,
@@ -880,17 +895,26 @@ const styles = StyleSheet.create({
         color: '#fff',
     },
     resultCard: {
-        width: '90%',
-        borderRadius: 24,
+        width: '92%',
+        maxWidth: 420,
+        borderRadius: 20,
         overflow: 'hidden',
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.3,
-        shadowRadius: 16,
-        elevation: 10,
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.2,
+        shadowRadius: 12,
+        elevation: 8,
+    },
+    resultOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.45)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 16,
     },
     resultGradient: {
-        padding: 32,
+        paddingVertical: 28,
+        paddingHorizontal: 22,
         alignItems: 'center',
     },
     resultExcellent: {
@@ -904,38 +928,50 @@ const styles = StyleSheet.create({
     },
     resultTitle: {
         fontFamily: 'Griffter',
-        fontSize: 28,
+        fontSize: 24,
         color: '#fff',
-        marginTop: 16,
+        marginTop: 12,
+        textAlign: 'center',
+    },
+    resultTopic: {
+        fontFamily: 'Outfit',
+        fontSize: 14,
+        color: '#fff',
+        opacity: 0.9,
+        marginTop: 6,
+        textAlign: 'center',
     },
     resultScore: {
         fontFamily: 'Griffter',
-        fontSize: 48,
+        fontSize: 42,
         color: '#fff',
-        marginTop: 16,
+        marginTop: 14,
     },
     resultPercentage: {
         fontFamily: 'Outfit',
-        fontSize: 24,
+        fontSize: 22,
         fontWeight: '700',
         color: '#fff',
         opacity: 0.9,
     },
     resultRemarks: {
         fontFamily: 'Outfit',
-        fontSize: 18,
+        fontSize: 17,
         color: '#fff',
         marginTop: 12,
         opacity: 0.95,
+        textAlign: 'center',
     },
     closeBtn: {
         backgroundColor: 'rgba(255,255,255,0.3)',
         paddingVertical: 12,
-        paddingHorizontal: 32,
+        paddingHorizontal: 36,
         borderRadius: 12,
-        marginTop: 24,
+        marginTop: 22,
         borderWidth: 2,
         borderColor: '#fff',
+        minWidth: 140,
+        alignItems: 'center',
     },
     closeBtnText: {
         fontFamily: 'Outfit',

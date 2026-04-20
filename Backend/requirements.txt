@@ -64,3 +64,5 @@ langchain>=0.1.0
 langchain-community>=0.0.20
 langchain-groq>=1.0.0
 chromadb>=0.4.0
+python-docx>=1.1.0
+python-pptx>=0.6.23

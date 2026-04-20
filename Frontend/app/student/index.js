@@ -211,7 +211,7 @@ export default function StudentDashboard() {
                 { key: 'courses-content', icon: 'book', label: 'Courses Contents' },
                 { key: 'attendance', icon: 'checkbox-outline', label: 'Attendance' },
                 { key: 'timetable', icon: 'calendar', label: 'Timetable' },
-                { key: 'Quizes', icon: 'document-text', label: 'Quize' },
+                { key: 'Quizes', icon: 'document-text', label: 'Quizz' },
             ]}
             centerButton={{
                 icon: 'podium',

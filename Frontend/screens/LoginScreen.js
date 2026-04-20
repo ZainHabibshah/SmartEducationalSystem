@@ -42,7 +42,8 @@ export default function LoginScreen() {
 
   const roleOptions = [
     { label: 'Student', value: 'student' },
-    { label: 'Admin', value: 'admin' },
+    { label: 'Teacher', value: 'admin' },          // backend role = 'admin' (teacher)
+    { label: 'Super Admin', value: 'superadmin' },
   ];
 
   const isValidEmail = (value) => {
@@ -85,17 +86,32 @@ export default function LoginScreen() {
         await AsyncStorage.setItem('access_token', result.access_token);
         
         if (role === 'admin') {
-          // Store admin data
           if (result.user) {
             await AsyncStorage.setItem('user_role', 'admin');
-            await AsyncStorage.setItem('admin_name', result.user.name || 'Administrator');
-            await AsyncStorage.setItem('admin_email', result.user.email || email);
-            await AsyncStorage.setItem('admin_course', result.user.course || '');
+            const displayName = result.user.name || 'Teacher';
+            const displayEmail = result.user.email || email;
+            await AsyncStorage.setItem('teacher_name', displayName);
+            await AsyncStorage.setItem('teacher_email', displayEmail);
+            await AsyncStorage.setItem('teacher_course', result.user.course || '');
+            await AsyncStorage.setItem('teacher_id', result.user.admin_id || '');
+            await AsyncStorage.setItem('teacher_address', result.user.address || '');
+            // Legacy keys used by admin dashboard / screens (e.g. AdminQuizScreen expects admin_id / admin_course)
+            await AsyncStorage.setItem('admin_name', displayName);
+            await AsyncStorage.setItem('admin_email', displayEmail);
             await AsyncStorage.setItem('admin_id', result.user.admin_id || '');
-            await AsyncStorage.setItem('admin_address', result.user.address || '');
+            await AsyncStorage.setItem('admin_course', result.user.course || '');
           }
-          showConfirmationBanner('Admin login successful!');
+          showConfirmationBanner('Teacher login successful!');
           router.replace('/admin');
+        } else if (role === 'superadmin') {
+          if (result.user) {
+            await AsyncStorage.setItem('user_role', 'superadmin');
+            await AsyncStorage.setItem('superadmin_name', result.user.name || 'Super Admin');
+            await AsyncStorage.setItem('superadmin_email', result.user.email || email);
+            await AsyncStorage.setItem('superadmin_id', result.user.admin_id || '');
+          }
+          showConfirmationBanner('Super Admin login successful!');
+          router.replace('/superadmin');
         } else {
           // Store student data
           await AsyncStorage.setItem('user_role', 'student');
@@ -281,7 +297,7 @@ export default function LoginScreen() {
 
             <View style={styles.forgotWrapper}>
               <TouchableOpacity onPress={handleForgetPassword} disabled={isLoading}>
-                <Text style={styles.forgot}>Forget Password ?</Text>
+                <Text style={styles.forgot}>Forgot Password?</Text>
               </TouchableOpacity>
             </View>
           </>

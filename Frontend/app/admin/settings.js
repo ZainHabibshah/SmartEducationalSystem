@@ -33,9 +33,18 @@ export default function SettingsScreen() {
 
     const loadAdminProfile = async () => {
         try {
-            const adminName = await AsyncStorage.getItem('admin_name') || '';
-            const adminEmail = await AsyncStorage.getItem('admin_email') || '';
-            const adminAddress = await AsyncStorage.getItem('admin_address') || '';
+            const adminName =
+                (await AsyncStorage.getItem('teacher_name')) ||
+                (await AsyncStorage.getItem('admin_name')) ||
+                '';
+            const adminEmail =
+                (await AsyncStorage.getItem('teacher_email')) ||
+                (await AsyncStorage.getItem('admin_email')) ||
+                '';
+            const adminAddress =
+                (await AsyncStorage.getItem('teacher_address')) ||
+                (await AsyncStorage.getItem('admin_address')) ||
+                '';
 
             setName(adminName);
             setEmail(adminEmail);
@@ -50,8 +59,6 @@ export default function SettingsScreen() {
 
     const go = (key) => {
         if (key === 'home') router.push('/admin');
-        if (key === 'bell') router.push('/admin/notification');
-        if (key === 'chatbot') router.push('/admin/chatbot');
         if (key === 'settings') router.push('/admin/settings');
     };
 
@@ -70,6 +77,9 @@ export default function SettingsScreen() {
                 await AsyncStorage.setItem('admin_name', name);
                 await AsyncStorage.setItem('admin_email', email);
                 await AsyncStorage.setItem('admin_address', address);
+                await AsyncStorage.setItem('teacher_name', name);
+                await AsyncStorage.setItem('teacher_email', email);
+                await AsyncStorage.setItem('teacher_address', address);
 
                 Alert.alert('Success', 'Profile updated successfully!');
             }
@@ -91,6 +101,7 @@ export default function SettingsScreen() {
         try {
             // Clear all stored admin data
             await AsyncStorage.multiRemove([
+                'access_token',
                 'auth_token',
                 'user_role',
                 'admin_name',
@@ -98,6 +109,11 @@ export default function SettingsScreen() {
                 'admin_course',
                 'admin_id',
                 'admin_address',
+                'teacher_name',
+                'teacher_email',
+                'teacher_course',
+                'teacher_id',
+                'teacher_address',
             ]);
             
             Alert.alert('Success', 'Logged out successfully');

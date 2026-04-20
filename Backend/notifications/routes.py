@@ -1,20 +1,14 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from pymongo import MongoClient
 from datetime import datetime
 from bson import ObjectId
-import os
 import traceback
+from database import connect_to_mongodb
 
 # Create Blueprint
 notifications_bp = Blueprint("notifications", __name__)
 
-# MongoDB Configuration - Using existing database connection
-# Same connection as database.py and check_database.py
-MONGODB_URI = os.environ.get(
-    "MONGODB_URI", "mongodb+srv://Luffy:hab1457@ses.wmweowm.mongodb.net/"
-)
-DATABASE_NAME = os.environ.get("DATABASE_NAME", "smart_app_db")
+DATABASE_NAME = "smart_app_db"
 
 # Per‑course collections (must match Backend/database.py)
 COURSE_COLLECTIONS = {
@@ -41,35 +35,16 @@ def get_students_collection_for_course(db, course: str):
 EMAIL_CONFIG = {
     'admin_email': 'smarteducationalcompanion@gmail.com',
     # Gmail App Password (generated in Google Account security settings)
-    'admin_password': 'ecmzswhkfmruuvtq',
+    'admin_password': 'swzpinbqjrgaochz',
     'smtp_server': 'smtp.gmail.com',
     'smtp_port': 587
 }
 
-client = None
-db = None
-
-try:
-    client = MongoClient(MONGODB_URI)
-    db = client[DATABASE_NAME]
-
-    # Test connection
-    client.admin.command("ping")
-    print(f"✅ Connected to MongoDB Atlas: {DATABASE_NAME}")
-
-    # Show current student counts per course
-    for key, coll_name in COURSE_COLLECTIONS.items():
-        try:
-            count = db[coll_name].count_documents({})
-            print(f"📊 {coll_name} (course={key}) students: {count}")
-        except Exception as inner_exc:
-            print(f"⚠️ Could not read collection {coll_name}: {inner_exc}")
-
-except Exception as e:
-    print(f"❌ MongoDB connection error: {e}")
-    print(f"💡 Check your MongoDB Atlas connection string and network access")
-    client = None
-    db = None
+def _get_db_or_response():
+    db = connect_to_mongodb()
+    if db is None:
+        return None, (jsonify({"error": "MongoDB connection not available"}), 500)
+    return db, None
 
 # Notification limits
 NOTIFICATION_LIMIT = 6  # Max notifications per student
@@ -338,8 +313,9 @@ def send_notification_to_all():
     }
     """
     try:
-        if db is None or client is None:
-            return jsonify({"error": "MongoDB connection not available"}), 500
+        db, error_response = _get_db_or_response()
+        if error_response:
+            return error_response
 
         data = request.get_json()
         
@@ -449,8 +425,9 @@ def send_notification_to_student():
     }
     """
     try:
-        if db is None or client is None:
-            return jsonify({"error": "MongoDB connection not available"}), 500
+        db, error_response = _get_db_or_response()
+        if error_response:
+            return error_response
 
         data = request.get_json()
         
@@ -571,8 +548,9 @@ def get_student_notifications(student_id):
     GET /get-student-notifications/<student_id>
     """
     try:
-        if db is None or client is None:
-            return jsonify({"error": "MongoDB connection not available"}), 500
+        db, error_response = _get_db_or_response()
+        if error_response:
+            return error_response
 
         course = (request.args.get("course") or "").strip()
         if not course:
@@ -640,8 +618,9 @@ def mark_notification_read():
     }
     """
     try:
-        if db is None or client is None:
-            return jsonify({"error": "MongoDB connection not available"}), 500
+        db, error_response = _get_db_or_response()
+        if error_response:
+            return error_response
 
         data = request.get_json()
         
@@ -726,8 +705,9 @@ def delete_notification():
     Note: Admin notification history is stored separately and is NOT affected by this deletion.
     """
     try:
-        if db is None or client is None:
-            return jsonify({"error": "MongoDB connection not available"}), 500
+        db, error_response = _get_db_or_response()
+        if error_response:
+            return error_response
 
         data = request.get_json()
         
@@ -826,8 +806,9 @@ def get_all_students():
     GET /get-all-students
     """
     try:
-        if db is None or client is None:
-            return jsonify({"error": "MongoDB connection not available"}), 500
+        db, error_response = _get_db_or_response()
+        if error_response:
+            return error_response
 
         course = (request.args.get("course") or "").strip()
         if not course:
@@ -885,8 +866,9 @@ def register_student():
     }
     """
     try:
-        if db is None or client is None:
-            return jsonify({"error": "MongoDB connection not available"}), 500
+        db, error_response = _get_db_or_response()
+        if error_response:
+            return error_response
 
         course = (request.args.get("course") or "").strip()
         if not course:
@@ -955,8 +937,9 @@ def delete_student(student_id):
     DELETE /delete-student/<student_id>
     """
     try:
-        if db is None or client is None:
-            return jsonify({"error": "MongoDB connection not available"}), 500
+        db, error_response = _get_db_or_response()
+        if error_response:
+            return error_response
 
         course = (request.args.get("course") or "").strip()
         if not course:
@@ -998,8 +981,9 @@ def get_admin_notification_history():
     GET /get-admin-notification-history
     """
     try:
-        if db is None:
-            return jsonify({"error": "MongoDB connection not available"}), 500
+        db, error_response = _get_db_or_response()
+        if error_response:
+            return error_response
         
         # Get admin email from JWT
         current_user = get_jwt_identity()
@@ -1053,18 +1037,8 @@ def health_check():
     GET /health
     """
     try:
-        # Check MongoDB connection
-        mongo_status = 'disconnected'
-        
-        if db is not None and client is not None:
-            # Try to ping MongoDB
-            try:
-                client.admin.command('ping')
-                mongo_status = 'connected'
-            except:
-                mongo_status = 'disconnected'
-        else:
-            mongo_status = 'disconnected'
+        db = connect_to_mongodb()
+        mongo_status = 'connected' if db is not None else 'disconnected'
         
         return jsonify(
             {

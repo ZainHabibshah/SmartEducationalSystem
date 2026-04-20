@@ -19,9 +19,10 @@ export default function Index() {
         console.error('❌ [App] Attempted URL:', API.BASE_URL);
         console.error('💡 [App] Troubleshooting:');
         console.error('   1. Make sure backend is running: cd Backend && python app.py');
-        console.error('   2. Check if IP is correct:', API.BASE_URL);
-        console.error('   3. Ensure both devices are on same WiFi');
-        console.error('   4. Check Windows Firewall allows port 8081');
+        console.error('   2. Check API base URL:', API.BASE_URL);
+        console.error('   3. If using USB + expo --localhost: run adb reverse tcp:5000 tcp:5000 and set EXPO_PUBLIC_ADB_REVERSE=1 in Frontend/.env');
+        console.error('   4. If using Wi‑Fi: use npm run start:lan and set EXPO_PUBLIC_API_URL to your PC IPv4');
+        console.error('   5. Check Windows Firewall allows the Flask backend port (default 5000)');
         console.warn('⚠️ App will continue loading, but backend features may not work');
       }
     };

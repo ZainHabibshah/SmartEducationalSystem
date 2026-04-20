@@ -272,13 +272,13 @@ export default function ScheduleScreen() {
 
 	return (
 		<View style={styles.container}>
-			{/* Header */}
-			<View style={styles.header}>
-				<TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-					<Ionicons name="arrow-back" size={24} color={COLORS.primary} />
+			{/* Header - same style as Timetable screen */}
+			<View style={styles.customHeaderContainer}>
+				<TouchableOpacity style={styles.customBackButton} onPress={() => router.back()} activeOpacity={0.8}>
+					<Ionicons name="arrow-back" size={22} color={COLORS.primary} />
 				</TouchableOpacity>
-				<Text style={styles.headerTitle}>Class Schedules</Text>
-				<View style={styles.placeholder} />
+				<Text style={styles.customHeaderTitle}>Course</Text>
+				<View style={styles.headerPlaceholder} />
 			</View>
 
 			<ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -368,30 +368,39 @@ const styles = StyleSheet.create({
 		flex: 1,
 		backgroundColor: COLORS.bg,
 	},
-	header: {
+	customHeaderContainer: {
+		padding: 20,
+		paddingTop: Platform.select({ ios: 70, android: 50 }),
+		backgroundColor: COLORS.bg,
 		flexDirection: 'row',
 		alignItems: 'center',
 		justifyContent: 'space-between',
-		padding: 16,
-		backgroundColor: COLORS.white,
-		borderBottomWidth: 1,
-		borderBottomColor: COLORS.border,
+		position: 'relative',
+	},
+	customBackButton: {
+		width: 40,
+		height: 40,
+		backgroundColor: '#fff',
+		borderRadius: 20,
+		borderWidth: 1,
+		borderColor: COLORS.primary,
+		alignItems: 'center',
+		justifyContent: 'center',
 		shadowColor: '#000',
-		shadowOffset: { width: 0, height: 2 },
+		shadowOffset: { width: 0, height: 1 },
 		shadowOpacity: 0.1,
-		shadowRadius: 4,
-		elevation: 3,
+		shadowRadius: 2,
+		elevation: 2,
+		zIndex: 10,
 	},
-	backButton: {
-		padding: 8,
-	},
-	headerTitle: {
-		fontSize: 20,
-		fontWeight: '600',
+	customHeaderTitle: {
+		fontFamily: 'Griffter',
+		fontSize: 28,
 		color: COLORS.primary,
-		fontFamily: 'Outfit',
+		textAlign: 'center',
+		flex: 1,
 	},
-	placeholder: {
+	headerPlaceholder: {
 		width: 40,
 	},
 	content: {

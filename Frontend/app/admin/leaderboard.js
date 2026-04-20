@@ -99,7 +99,9 @@ export default function AdminLeaderboardScreen() {
         if (router.canGoBack()) {
             router.back();
         } else {
-            router.push('/admin');
+            AsyncStorage.getItem('user_role')
+                .then(() => router.push('/admin'))
+                .catch(() => router.push('/admin'));
         }
     };
 
@@ -263,7 +265,7 @@ export default function AdminLeaderboardScreen() {
                                                 })}
                                                 {achievementBadges.length > 5 && (
                                                     <Text style={styles.moreBadgesText}>
-                                                        +{achievementBadges.length - 5}
+                                                        {`+{achievementBadges.length - 5}`}
                                                     </Text>
                                                 )}
                                             </View>

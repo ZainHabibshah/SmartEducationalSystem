@@ -30,9 +30,15 @@ export default function AdminDashboard() {
 
     const refreshDashboardData = async () => {
         try {
-            // Get admin data from AsyncStorage (refresh in case it changed)
-            const adminName = await AsyncStorage.getItem('admin_name') || 'Administrator';
-            const adminEmail = await AsyncStorage.getItem('admin_email') || '';
+            // Teacher login stores teacher_*; older builds used admin_*
+            const adminName =
+                (await AsyncStorage.getItem('teacher_name')) ||
+                (await AsyncStorage.getItem('admin_name')) ||
+                'Teacher';
+            const adminEmail =
+                (await AsyncStorage.getItem('teacher_email')) ||
+                (await AsyncStorage.getItem('admin_email')) ||
+                '';
             
             // Fetch student count from API (refresh to get latest count)
             let studentCount = 0;
@@ -77,9 +83,14 @@ export default function AdminDashboard() {
 
     const loadAdminData = async () => {
         try {
-            // Get admin data from AsyncStorage
-            const adminName = await AsyncStorage.getItem('admin_name') || 'Administrator';
-            const adminEmail = await AsyncStorage.getItem('admin_email') || '';
+            const adminName =
+                (await AsyncStorage.getItem('teacher_name')) ||
+                (await AsyncStorage.getItem('admin_name')) ||
+                'Teacher';
+            const adminEmail =
+                (await AsyncStorage.getItem('teacher_email')) ||
+                (await AsyncStorage.getItem('admin_email')) ||
+                '';
             
             // Fetch student count from API
             let studentCount = 0;
@@ -190,16 +201,16 @@ export default function AdminDashboard() {
 
 
     const handlePressCard = (key) => {
-        if (key === 'students') {
-            router.push('/admin/students');
-        } else if (key === 'attendance') {
-            router.push('/admin/attendance');
-        } else if (key === 'timetable') {
-            router.push('/admin/timetable');
-        } else if (key === 'schedules') {
-            router.push('/admin/schedule');
-        } else if (key === 'quiz') {
-            router.push('/admin/quiz');
+        const routes = {
+            students: '/admin/students',
+            attendance: '/admin/attendance',
+            timetable: '/admin/timetable',
+            schedule: '/admin/schedule',
+            leaderboard: '/admin/leaderboard',
+        };
+        const path = routes[key];
+        if (path) {
+            router.push(path);
         }
     };
 
@@ -208,10 +219,10 @@ export default function AdminDashboard() {
             router.push('/admin');
         } else if (key === 'bell') {
             router.push('/admin/notification');
-		} else if (key === 'calendar') {
-			router.push('/admin/chatbot');
-		} else if (key === 'settings') {
-			router.push('/admin/settings');
+        } else if (key === 'chatbot') {
+            router.push('/admin/chatbot');
+        } else if (key === 'settings') {
+            router.push('/admin/settings');
         }
     };
 
@@ -242,24 +253,25 @@ export default function AdminDashboard() {
             onPressCard={handlePressCard}
             gridItems={[
                 { key: 'students', icon: 'people', label: 'Students' },
-                { key: 'attendance', icon: 'checkbox-outline', label: 'Attendance' },
+                { key: 'attendance', icon: 'checkmark-done', label: 'Attendance' },
                 { key: 'timetable', icon: 'calendar', label: 'Timetable' },
-                { key: 'schedules', icon: 'time', label: 'Schedules' },
+                { key: 'schedule', icon: 'document-text', label: 'Schedule' },
             ]}
             centerButton={{
-                icon: 'podium',
+                icon: 'trophy',
                 label: 'Leaderboard',
-                onPress: () => router.push('/admin/leaderboard'),
+                onPress: () => handlePressCard('leaderboard'),
             }}
             footerButton={{
-                icon: 'help-circle',
+                icon: 'school',
                 label: 'Quiz',
                 onPress: () => router.push('/admin/quiz'),
+                compact: true,
             }}
             bottomIcons={[
                 { key: 'home', icon: 'home', onPress: () => handleBottomPress('home') },
                 { key: 'bell', icon: 'notifications', onPress: () => handleBottomPress('bell') },
-                { key: 'calendar', icon: 'chatbubbles', onPress: () => handleBottomPress('calendar') },
+                { key: 'chatbot', icon: 'chatbubbles', onPress: () => handleBottomPress('chatbot') },
                 { key: 'settings', icon: 'settings', onPress: () => handleBottomPress('settings') },
             ]}
         />

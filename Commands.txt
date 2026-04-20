@@ -47,3 +47,5 @@ adb reverse --list
 --You should see: 5000 tcp:5000 tcp:5000
 
 npm start -- --reset-cache
+
+npx expo start --localhost --clear

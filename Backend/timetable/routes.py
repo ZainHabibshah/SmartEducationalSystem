@@ -124,11 +124,6 @@ def extract_text_from_image(image_path):
             print("❌ Image preprocessing failed")
             return None
         
-        # Save processed image for debugging
-        debug_path = image_path.replace('.', '_processed.')
-        cv2.imwrite(debug_path, processed_image)
-        print(f"💾 Saved processed image to: {debug_path}")
-        
         # Try different OCR configurations
         configs = [
             r'--oem 3 --psm 6',      # Uniform block of text
@@ -408,9 +403,8 @@ def upload_timetable():
             print(f"📁 File saved: {filepath}")
             print(f"📊 File size: {os.path.getsize(filepath)} bytes")
             
-            # Try to extract text and generate embeddings (optional features)
+            # Optional: extract text for diagnostics only (no embeddings/vectors for timetable chatbot)
             extracted_text = None
-            embeddings_filename = None
             
             try:
                 # Extract text from image (optional)
@@ -418,33 +412,17 @@ def upload_timetable():
                 
                 if extracted_text:
                     print(f"✅ Extracted {len(extracted_text)} characters of text")
-                    
-                    # Generate embeddings (optional)
-                    embeddings = generate_embeddings(extracted_text)
-                    
-                    if embeddings:
-                        # Save embeddings to text file
-                        embeddings_filename = filename.replace('.', '_') + '_embeddings.txt'
-                        embeddings_path = save_embeddings_to_txt(
-                            embeddings, 
-                            embeddings_filename, 
-                            current_app.config['EMBEDDINGS_FOLDER']
-                        )
-                        print(f"✅ Embeddings saved to: {embeddings_path}")
-                    else:
-                        print("⚠️  Could not generate embeddings (model not available)")
                 else:
                     print("⚠️  Could not extract text from image (OCR failed or Tesseract not installed)")
             except Exception as e:
-                print(f"⚠️  OCR/Embedding processing failed (non-critical): {e}")
+                print(f"⚠️  OCR processing failed (non-critical): {e}")
                 # Continue anyway - timetable image is saved and can be viewed
             
             return jsonify({
                 'success': True,
                 'message': 'Timetable uploaded successfully',
                 'filename': filename,
-                'extracted_text': extracted_text if extracted_text else 'OCR not available',
-                'embeddings_file': embeddings_filename if embeddings_filename else 'Embeddings not available'
+                'extracted_text': extracted_text if extracted_text else 'OCR not available'
             }), 200
         
         else:
@@ -606,6 +584,14 @@ def delete_timetable(filename):
         
         # Delete all associated files
         deleted_files = delete_timetable_files(filename)
+        # Clear timetable chatbot cached context so deleted file is not used
+        try:
+            from chatbot.routes import get_rag_pipeline
+            pipeline = get_rag_pipeline()
+            if pipeline:
+                pipeline.clear_timetable_context_cache()
+        except Exception as vec_err:
+            print(f"⚠️  Could not clear timetable chatbot cache for {filename}: {vec_err}")
         
         if deleted_files:
             return jsonify({

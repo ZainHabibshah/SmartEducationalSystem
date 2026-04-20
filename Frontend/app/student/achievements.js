@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState, useEffect } from 'react';
-import { Dimensions, ScrollView, StatusBar, StyleSheet, Text, View, TouchableOpacity, Modal, ActivityIndicator, Platform } from 'react-native';
+import { Dimensions, ScrollView, StatusBar, StyleSheet, Text, View, TouchableOpacity, Modal, ActivityIndicator, Platform, Pressable } from 'react-native';
 import BottomNav from '../../components/BottomNav';
 import { ACHIEVEMENTS } from '../../data/achievements';
 import apiService from '../../services/apiService';
@@ -194,10 +194,11 @@ export default function StudentAchievementsScreen() {
                 transparent={true}
                 onRequestClose={closeModal}
             >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
+                <Pressable style={styles.modalOverlay} onPress={closeModal}>
+                    <Pressable style={styles.modalContent} onPress={() => {}}>
                         <View style={styles.modalHeader}>
-                            <TouchableOpacity onPress={closeModal} style={styles.closeButton}>
+                            <Text style={styles.modalHeaderTitle}>Achievement Details</Text>
+                            <TouchableOpacity onPress={closeModal} style={styles.closeButton} activeOpacity={0.8}>
                                 <Ionicons name="close" size={28} color={COLORS.inputBg} />
                             </TouchableOpacity>
                         </View>
@@ -205,6 +206,8 @@ export default function StudentAchievementsScreen() {
                         <ScrollView
                             style={styles.modalScrollView}
                             contentContainerStyle={styles.modalScrollContent}
+                            showsVerticalScrollIndicator={false}
+                            bounces={false}
                         >
                             <View
                                 style={[
@@ -283,9 +286,17 @@ export default function StudentAchievementsScreen() {
                                     </View>
                                 ))}
                             </View>
+
+                            <TouchableOpacity
+                                style={styles.modalDoneButton}
+                                onPress={closeModal}
+                                activeOpacity={0.85}
+                            >
+                                <Text style={styles.modalDoneButtonText}>Done</Text>
+                            </TouchableOpacity>
                         </ScrollView>
-                    </View>
-                </View>
+                    </Pressable>
+                </Pressable>
             </Modal>
         );
     };
@@ -522,25 +533,43 @@ const styles = StyleSheet.create({
         backgroundColor: '#fff',
         borderTopLeftRadius: 25,
         borderTopRightRadius: 25,
-        maxHeight: '90%',
-        paddingBottom: 20,
+        maxHeight: '88%',
+        minHeight: '70%',
+        overflow: 'hidden',
     },
     modalHeader: {
         flexDirection: 'row',
-        justifyContent: 'flex-end',
-        padding: 16,
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 18,
+        paddingVertical: 14,
         borderBottomWidth: 1,
         borderBottomColor: '#E5E7EB',
+        backgroundColor: '#F8FAFC',
+    },
+    modalHeaderTitle: {
+        fontFamily: 'Outfit',
+        fontSize: 16,
+        fontWeight: '700',
+        color: COLORS.inputBg,
     },
     closeButton: {
-        padding: 4,
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#fff',
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
     },
     modalScrollView: {
         flex: 1,
     },
     modalScrollContent: {
-        padding: 20,
-        paddingBottom: 40,
+        paddingHorizontal: 20,
+        paddingTop: 20,
+        paddingBottom: 28,
     },
     modalIconContainer: {
         width: 120,
@@ -625,5 +654,19 @@ const styles = StyleSheet.create({
         marginLeft: 12,
         lineHeight: 20,
         fontFamily: 'Outfit',
+    },
+    modalDoneButton: {
+        marginTop: 18,
+        backgroundColor: COLORS.inputBg,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 14,
+    },
+    modalDoneButtonText: {
+        fontFamily: 'Outfit',
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#fff',
     },
 });

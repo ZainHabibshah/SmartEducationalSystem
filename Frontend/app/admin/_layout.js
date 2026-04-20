@@ -8,9 +8,13 @@ export default function AdminLayout() {
 			<Stack.Screen name="students" />
 			<Stack.Screen name="edit-student" />
 			<Stack.Screen name="add-student" />
+			<Stack.Screen name="notification" />
 			<Stack.Screen name="attendance" />
+			<Stack.Screen name="timetable" />
+			<Stack.Screen name="course-materials" />
+			<Stack.Screen name="leaderboard" />
 			<Stack.Screen name="schedule" />
-            <Stack.Screen name="notification" />
+			<Stack.Screen name="quiz" />
 			<Stack.Screen name="chatbot" />
 			<Stack.Screen name="settings" />
 		</Stack>

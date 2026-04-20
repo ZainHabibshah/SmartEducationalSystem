@@ -1,5 +1,7 @@
 # database.py
+import os
 from pymongo import MongoClient
+import certifi
 
 """
 Central MongoDB connection helpers.
@@ -8,7 +10,8 @@ Central MongoDB connection helpers.
 ---------------------------------------------------
 Database: smart_app_db
 Collections:
-  - admin         -> stores one document per course‑instructor (role: 'admin', course field)
+  - admin           -> stores one document per course instructor/admin (role: 'admin', course field)
+  - superadmins     -> stores platform-level super admin accounts (role: 'superadmin')
   - computerScience -> students of Computer Science course only
   - Chemistery      -> students of Chemistry course only
   - Physics         -> students of Physics course only
@@ -26,35 +29,70 @@ COURSE_COLLECTIONS = {
     "physics": "Physics",
 }
 
+_mongo_client = None
+_mongo_db = None
+
+def _new_mongo_client(mongo_uri: str):
+    return MongoClient(
+        mongo_uri,
+        # Keep auth endpoints responsive when Atlas is unreachable.
+        serverSelectionTimeoutMS=5000,
+        connectTimeoutMS=5000,
+        socketTimeoutMS=8000,
+        tls=True,
+        tlsCAFile=certifi.where(),
+        retryWrites=True,
+    )
+
 
 def connect_to_mongodb():
     """Direct MongoDB connection to the Atlas cluster and `smart_app_db`."""
+    global _mongo_client, _mongo_db
     try:
-        client = MongoClient(
-            "mongodb+srv://Luffy:hab1457@ses.wmweowm.mongodb.net/"
+        # Support legacy typo used in some local environments.
+        mongo_uri = (
+            os.getenv("MONGODB_URI", "").strip()
+            or os.getenv("MONGOODB_URI", "").strip()
+            or "mongodb+srv://Luffy:hab1457@ses.wmweowm.mongodb.net/"
         )
-        db = client["smart_app_db"]
-        print("✅ Connected to MongoDB 'smart_app_db' successfully!")
+        db_name = os.getenv("MONGODB_DB_NAME", "smart_app_db").strip() or "smart_app_db"
+        if "Luffy:hab1457" in mongo_uri:
+            print("⚠️ Using fallback MongoDB URI from source code. Set MONGODB_URI in environment for production.")
 
-        # Helpful debug information about the new layout
-        try:
-            admin_count = db["admin"].count_documents({})
-            cs_count = db["computerScience"].count_documents({})
-            chem_count = db["Chemistery"].count_documents({})
-            phy_count = db["Physics"].count_documents({})
-            print(
-                f"📊 Admin: {admin_count}, "
-                f"CS students: {cs_count}, "
-                f"Chemistry students: {chem_count}, "
-                f"Physics students: {phy_count}"
-            )
-        except Exception as inner_exc:
-            # Don't fail the whole connection just because counts failed
-            print(f"⚠️ Could not read collection counts: {inner_exc}")
+        # Build a fresh client for each request to avoid stale sockets that can
+        # hang login attempts for a long time on unstable networks.
+        _mongo_client = _new_mongo_client(mongo_uri)
+        _mongo_db = _mongo_client[db_name]
+        _mongo_client.admin.command("ping")
+        db = _mongo_db
+        print(f"✅ Connected to MongoDB '{db_name}' successfully!")
+
+        # Optional collection count diagnostics (disabled by default).
+        # Running multiple count queries during login can add heavy delays when
+        # the cluster is slow/unavailable.
+        if os.getenv("DEBUG_DB_COUNTS", "").strip() == "1":
+            try:
+                admin_count = db["admin"].count_documents({})
+                superadmin_count = db["superadmins"].count_documents({})
+                cs_count = db["computerScience"].count_documents({})
+                chem_count = db["Chemistery"].count_documents({})
+                phy_count = db["Physics"].count_documents({})
+                print(
+                    f"📊 Admin: {admin_count}, "
+                    f"Super Admin: {superadmin_count}, "
+                    f"CS students: {cs_count}, "
+                    f"Chemistry students: {chem_count}, "
+                    f"Physics students: {phy_count}"
+                )
+            except Exception as inner_exc:
+                # Don't fail the whole connection just because counts failed
+                print(f"⚠️ Could not read collection counts: {inner_exc}")
 
         return db
     except Exception as e:
         print(f"❌ MongoDB connection error: {e}")
+        _mongo_client = None
+        _mongo_db = None
         return None
 
 

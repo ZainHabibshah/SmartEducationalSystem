@@ -1,10 +1,27 @@
 # app.py - SIMPLE VERSION
 import os
+import sys
 from flask import Flask, jsonify
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
+
+# Avoid long startup stalls when model hosts are unreachable.
+# If models are already cached locally, modules load instantly; otherwise
+# optional blueprints will fail fast and app still starts.
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+
 from auth.routes import auth_bp
 from notifications.routes import notifications_bp
+
+# Ensure Windows consoles that default to cp1252 don't crash on unicode log symbols.
+try:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
 
 # Load environment variables from .env file
 try:
@@ -96,6 +113,20 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
+# Course materials (PDF/DOCX/PPTX) → per-subject Chroma embeddings
+try:
+    from course_materials.routes import course_materials_bp
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    app.config['COURSE_MATERIALS_UPLOAD_FOLDER'] = os.path.join(BASE_DIR, 'uploads', 'course_materials')
+    os.makedirs(app.config['COURSE_MATERIALS_UPLOAD_FOLDER'], exist_ok=True)
+    app.register_blueprint(course_materials_bp, url_prefix='/api/course-materials')
+    print("✅ Course materials blueprint registered")
+    print(f"📁 Course materials uploads: {app.config['COURSE_MATERIALS_UPLOAD_FOLDER']}")
+except Exception as e:
+    print(f"⚠️ Course materials blueprint not available: {e}")
+    import traceback
+    traceback.print_exc()
+
 @app.route('/health')
 def health_check():
     return jsonify({
@@ -107,25 +138,20 @@ def health_check():
 if __name__ == '__main__':
     import sys
     import warnings
+    backend_port = int(os.getenv("FLASK_PORT", "5000"))
     
-    print("🚀 Starting Flask server on http://0.0.0.0:8081") 
-    print("📱 For Android Emulator, use: http://10.0.2.2:8081")
+    print(f"🚀 Starting Flask server on http://0.0.0.0:{backend_port}") 
+    print(f"📱 For Android Emulator, use: http://10.0.2.2:{backend_port}")
     print("💻 For iOS Simulator/Physical Device, use your computer's IP address")
     
     # Fix for Windows threading issue with Flask reloader
     # Suppress the threading error that occurs on Windows (doesn't affect functionality)
     if sys.platform == 'win32':
-        # Suppress the Windows selector threading warning
+        # Suppress noisy request logs on Windows terminals
         import logging
         logging.getLogger('werkzeug').setLevel(logging.ERROR)
-        # On Windows, use reloader but suppress threading errors
-        # The error is harmless and doesn't affect server functionality
-        try:
-            app.run(host='0.0.0.0', port=8081, debug=True, use_reloader=True, threaded=True)
-        except (OSError, RuntimeError) as e:
-            # If reloader fails, fall back to no reloader
-            print(f"⚠️  Reloader issue detected, continuing without auto-reload: {e}")
-            app.run(host='0.0.0.0', port=8081, debug=True, use_reloader=False, threaded=True)
+        # Use no reloader on Windows for more reliable startup/network behavior.
+        app.run(host='0.0.0.0', port=backend_port, debug=True, use_reloader=False, threaded=True)
     else:
         # On Linux/Mac, use normal reloader
-        app.run(host='0.0.0.0', port=8081, debug=True, threaded=True)
+        app.run(host='0.0.0.0', port=backend_port, debug=True, threaded=True)

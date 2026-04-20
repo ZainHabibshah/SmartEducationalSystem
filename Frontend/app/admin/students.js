@@ -16,11 +16,13 @@ import OTPModal from '../../components/OTPModal';
 import UploadConfirmationModal from '../../components/UploadConfirmationModal';
 import { COLORS } from '../../constants/colors';
 import apiService from '../../services/apiService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width, height } = Dimensions.get('window');
 
 export default function StudentsListScreen() {
     const router = useRouter();
+    const [basePath, setBasePath] = useState('/admin');
     const [students, setStudents] = useState([]);
     const [filteredStudents, setFilteredStudents] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -38,6 +40,14 @@ export default function StudentsListScreen() {
     const fadeAnim = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
+        (async () => {
+            try {
+                setBasePath('/admin');
+            } catch {
+                setBasePath('/admin');
+            }
+        })();
+
         Animated.parallel([
             Animated.timing(slideAnim, {
                 toValue: 0,
@@ -120,7 +130,7 @@ export default function StudentsListScreen() {
 
     const handleEditStudent = (student) => {
         router.push({
-            pathname: '/admin/edit-student',
+            pathname: `${basePath}/edit-student`,
             params: { studentData: JSON.stringify(student) }
         });
     };
@@ -146,7 +156,7 @@ export default function StudentsListScreen() {
 
     const handleAddStudent = () => {
         // Directly navigate to add-student; OTP will be requested at the end of the add flow
-        router.push('/admin/add-student');
+        router.push(`${basePath}/add-student`);
     };
 
     const requestAddStudentOtp = async () => {

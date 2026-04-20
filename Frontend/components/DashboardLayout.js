@@ -30,6 +30,8 @@ export default function DashboardLayout({
 	footerButton,
 	achievementBadges = [], // Array of achievement objects with id, icon, color
 	centerButton, // Circular button in center of grid: { icon, label, onPress }
+	/** Optional content rendered after the news card and before the grid (e.g. super admin actions). */
+	belowNews = null,
 }) {
 	const [currentNewsIndex, setCurrentNewsIndex] = useState(0);
 	const slideAnim = useRef(new Animated.Value(-100)).current;
@@ -256,6 +258,7 @@ export default function DashboardLayout({
 						</View>
 					</View>
 				)}
+				{belowNews}
 					<View style={styles.grid}>
 						{gridItems.map((item) => (
 							<TouchableOpacity
@@ -287,14 +290,33 @@ export default function DashboardLayout({
 					</View>
 					{footerButton && (
 						<TouchableOpacity
-							style={styles.fullWidthButton}
+							style={[
+								styles.fullWidthButton,
+								footerButton.compact && styles.fullWidthButtonCompact,
+							]}
 							activeOpacity={0.85}
 							onPress={footerButton.onPress}
 						>
-							<View style={styles.fullWidthButtonIconWrap}>
-								<Ionicons name={footerButton.icon} size={28} color={COLORS.inputBg} />
+							<View
+								style={[
+									styles.fullWidthButtonIconWrap,
+									footerButton.compact && styles.fullWidthButtonIconWrapCompact,
+								]}
+							>
+								<Ionicons
+									name={footerButton.icon}
+									size={footerButton.compact ? 22 : 28}
+									color={COLORS.inputBg}
+								/>
 							</View>
-							<Text style={styles.fullWidthButtonText}>{footerButton.label}</Text>
+							<Text
+								style={[
+									styles.fullWidthButtonText,
+									footerButton.compact && styles.fullWidthButtonTextCompact,
+								]}
+							>
+								{footerButton.label}
+							</Text>
 						</TouchableOpacity>
 					)}
 				</ScrollView>
@@ -632,6 +654,14 @@ const styles = StyleSheet.create({
 		shadowRadius: 4,
 		elevation: 4,
 	},
+	/** Shorter strip: ~half the visual height of a grid card row */
+	fullWidthButtonCompact: {
+		height: 52,
+		minHeight: 48,
+		marginTop: 8,
+		paddingVertical: 6,
+		borderRadius: 14,
+	},
 	fullWidthButtonIconWrap: {
 		width: 45,
 		height: 45,
@@ -641,10 +671,19 @@ const styles = StyleSheet.create({
 		justifyContent: 'center',
 		marginRight: 10,
 	},
+	fullWidthButtonIconWrapCompact: {
+		width: 36,
+		height: 36,
+		borderRadius: 18,
+		marginRight: 8,
+	},
 	fullWidthButtonText: {
 		fontFamily: 'Outfit',
 		fontSize: 15,
 		color: COLORS.inputBg,
+	},
+	fullWidthButtonTextCompact: {
+		fontSize: 14,
 	},
 	cardIconContainer: {
 		width: 45,

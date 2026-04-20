@@ -2,7 +2,26 @@
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 
-const DEFAULT_PORT = 8081;
+const rawPort = Number(process.env.EXPO_PUBLIC_API_PORT);
+const DEFAULT_PORT =
+  Number.isFinite(rawPort) && rawPort > 0 && rawPort <= 65535
+    ? rawPort
+    : 5000;
+const RESERVED_METRO_PORT = 8081;
+
+/**
+ * USB + physical device + `expo start --localhost`: Metro reports 127.0.0.1, so auto-detect fails.
+ * Set EXPO_PUBLIC_ADB_REVERSE=1 and run: adb reverse tcp:5000 tcp:5000
+ * (Flask must listen on the PC; 0.0.0.0 in app.py is fine.)
+ */
+const ADB_REVERSE_API =
+  process.env.EXPO_PUBLIC_ADB_REVERSE === "1" ||
+  process.env.EXPO_PUBLIC_ADB_REVERSE === "true";
+
+/** Set to 1/true with EXPO_PUBLIC_API_URL=http://127.0.0.1:... when using `adb reverse tcp:5000 tcp:5000`. */
+const TRUST_LOOPBACK_API =
+  process.env.EXPO_PUBLIC_TRUST_LOOPBACK_API === "1" ||
+  process.env.EXPO_PUBLIC_TRUST_LOOPBACK_API === "true";
 
 /**
  * Automatically detects and builds backend API URL that works on any network.
@@ -18,11 +37,48 @@ const resolveBaseUrl = () => {
   const normalize = (value) =>
     value?.endsWith("/") ? value.slice(0, -1) : value;
 
+  if (ADB_REVERSE_API) {
+    const url = `http://127.0.0.1:${DEFAULT_PORT}`;
+    console.log(
+      `📡 [Config] EXPO_PUBLIC_ADB_REVERSE=1 → API base: ${url} (requires: adb reverse tcp:${DEFAULT_PORT} tcp:${DEFAULT_PORT})`
+    );
+    return url;
+  }
+
   // 1. Check environment variable first (manual override if needed)
   const envUrl = normalize(process.env.EXPO_PUBLIC_API_URL);
   if (envUrl) {
-    console.log('📡 [Config] Using API URL from EXPO_PUBLIC_API_URL:', envUrl);
-    return envUrl;
+    const isLoopbackEnv =
+      envUrl.includes("127.0.0.1") ||
+      envUrl.includes("localhost") ||
+      envUrl.includes("0.0.0.0");
+
+    // On physical devices, loopback usually points to the phone, not the PC — unless you use adb reverse.
+    if (isLoopbackEnv && !TRUST_LOOPBACK_API) {
+      console.log(
+        "📡 [Config] Ignoring loopback EXPO_PUBLIC_API_URL for device networking:",
+        envUrl
+      );
+      console.log(
+        "📡 [Config] For USB + adb reverse, set EXPO_PUBLIC_TRUST_LOOPBACK_API=1 and run: adb reverse tcp:5000 tcp:5000"
+      );
+    } else {
+      if (isLoopbackEnv && TRUST_LOOPBACK_API) {
+        console.log(
+          "📡 [Config] Using loopback API URL (TRUST_LOOPBACK_API) — ensure adb reverse maps the backend port."
+        );
+      }
+      if (envUrl.includes(`:${RESERVED_METRO_PORT}`)) {
+        console.warn(
+          `⚠️ [Config] EXPO_PUBLIC_API_URL is using port ${RESERVED_METRO_PORT}, which is typically reserved for Expo Metro.`
+        );
+        console.warn(
+          `⚠️ [Config] This may break backend calls. Prefer Flask on port ${DEFAULT_PORT} (or another non-Metro port).`
+        );
+      }
+      console.log('📡 [Config] Using API URL from EXPO_PUBLIC_API_URL:', envUrl);
+      return envUrl;
+    }
   }
 
   // 2. AUTO-DETECT: Get host from Expo/Metro bundler connection
@@ -94,6 +150,15 @@ const resolveBaseUrl = () => {
       console.log('📡 [Config] Using same IP as Metro bundler - works on any WiFi!');
       return url;
     }
+
+    // Accept hostname values too (e.g. DESKTOP-ABC123, my-pc.local)
+    // Expo often exposes hostUri as hostname:port instead of raw IP.
+    const isLocalOnlyHost = host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0';
+    if (host && !isLocalOnlyHost) {
+      const url = `http://${host}:${DEFAULT_PORT}`;
+      console.log('📡 [Config] ✅ Auto-detected API URL from hostname:', url);
+      return url;
+    }
     
     // If hostUri exists but doesn't contain valid IP, log for debugging
     console.log('📡 [Config] ⚠️  Host URI found but no valid IP extracted:', hostUri);
@@ -107,9 +172,11 @@ const resolveBaseUrl = () => {
   });
 
   const fallbackUrl = `http://${loopbackHost}:${DEFAULT_PORT}`;
-  console.log('📡 [Config] ⚠️  Using fallback (simulator/emulator only):', fallbackUrl);
-  console.log('📡 [Config] 💡 On physical device, Expo should auto-detect the IP');
-  console.log('📡 [Config] 💡 If this doesn\'t work, make sure you\'re using: npm run start:lan');
+  console.log('📡 [Config] ⚠️  Using fallback:', fallbackUrl);
+  console.log(
+    "📡 [Config] 💡 Android emulator: 10.0.2.2 reaches the host PC. A physical phone does NOT — set EXPO_PUBLIC_API_URL to your PC LAN IP (same WiFi) or use adb reverse + EXPO_PUBLIC_TRUST_LOOPBACK_API."
+  );
+  console.log('📡 [Config] 💡 Start Metro with LAN: npm run start:lan');
   return fallbackUrl;
 };
 
@@ -129,7 +196,7 @@ export const testBackendConnection = async () => {
     console.error('💡 [Config] Make sure:');
     console.error('   1. Backend server is running (python app.py)');
     console.error('   2. Both devices are on the same WiFi');
-    console.error('   3. Firewall allows port 8081');
+    console.error(`   3. Firewall allows port ${DEFAULT_PORT}`);
     return { success: false, error: error.message };
   }
 };

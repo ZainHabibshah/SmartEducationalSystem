@@ -1,8 +1,19 @@
 // apiService.js
 import axios from 'axios';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import API from '../config';
+
+const backendPort = (() => {
+  try {
+    const parsed = new URL(API.BASE_URL);
+    return parsed.port || '5000';
+  } catch {
+    return process.env.EXPO_PUBLIC_API_PORT || '5000';
+  }
+})();
 
 class ApiService {
   constructor() {
@@ -44,10 +55,10 @@ class ApiService {
       (error) => {
         if (error.code === 'ECONNREFUSED' || error.message === 'Network Error') {
           console.error('❌ Network Error: Cannot connect to backend server.');
-          console.error('💡 Make sure the backend server is running on port 8081');
+          console.error(`💡 Make sure the backend server is running on port ${backendPort}`);
           console.error('💡 Check your BASE_URL in config.js matches your setup');
           const networkError = {
-            error: 'Cannot connect to server. Please ensure the backend is running on port 8081.',
+            error: `Cannot connect to server. Please ensure the backend is running on port ${backendPort}.`,
             message: 'Network Error: Backend server is not reachable',
             code: 'NETWORK_ERROR'
           };
@@ -799,6 +810,148 @@ class ApiService {
       throw error;
     }
   }
+
+  async uploadCourseMaterial(fileUri, fileName, course) {
+    try {
+      const formData = new FormData();
+      const ext = (fileName.split('.').pop() || '').toLowerCase();
+      let mime = 'application/pdf';
+      if (ext === 'docx') {
+        mime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      } else if (ext === 'pptx') {
+        mime = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+      }
+      if (Platform.OS === 'web') {
+        const response = await fetch(fileUri);
+        const blob = await response.blob();
+        formData.append('file', new File([blob], fileName, { type: mime }));
+      } else {
+        formData.append('file', {
+          uri: fileUri,
+          type: mime,
+          name: fileName,
+        });
+      }
+      formData.append('course', course);
+      const result = await this.axiosInstance.post('/api/course-materials/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 120000,
+      });
+      return result;
+    } catch (error) {
+      console.error('Upload course material error:', error);
+      throw error;
+    }
+  }
+
+  async listCourseMaterials(course) {
+    try {
+      return await this.axiosInstance.get('/api/course-materials/list', {
+        params: { course },
+        timeout: 30000,
+      });
+    } catch (error) {
+      console.error('List course materials error:', error);
+      throw error;
+    }
+  }
+
+  async deleteCourseMaterial(course, storageId) {
+    try {
+      return await this.axiosInstance.delete('/api/course-materials/delete', {
+        params: { course, storage_id: storageId },
+        timeout: 30000,
+      });
+    } catch (error) {
+      console.error('Delete course material error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * JWT-protected course file download (chatbot links). Native: save to cache + share sheet; web: blob save.
+   */
+  async downloadCourseMaterialWithAuth(pathOrFullUrl) {
+    let path = pathOrFullUrl;
+    if (typeof pathOrFullUrl === 'string' && pathOrFullUrl.startsWith('http')) {
+      try {
+        const u = new URL(pathOrFullUrl);
+        path = u.pathname;
+      } catch {
+        path = pathOrFullUrl;
+      }
+    }
+    if (!path.startsWith('/')) {
+      path = `/${path}`;
+    }
+    let token = this.token;
+    if (!token) {
+      try {
+        token = await AsyncStorage.getItem('access_token');
+      } catch {
+        token = null;
+      }
+    }
+    const base = API.BASE_URL.replace(/\/$/, '');
+    const url = `${base}${path}`;
+
+    if (Platform.OS === 'web') {
+      const res = await fetch(url, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        throw new Error('Download failed');
+      }
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = path.split('/').pop() || 'download';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(objectUrl);
+      return { uri: objectUrl };
+    }
+
+    const dest = `${FileSystem.cacheDirectory}course_${Date.now()}`;
+    const result = await FileSystem.downloadAsync(url, dest, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    const canShare = await Sharing.isAvailableAsync();
+    if (canShare) {
+      await Sharing.shareAsync(result.uri);
+    }
+    return result;
+  }
+
+  // ==================== CHATBOT METHODS ====================
+  async chatbotChat(question, intent = null) {
+    try {
+      const result = await this.axiosInstance.post(
+        '/api/chatbot/chat',
+        { question, intent },
+        {
+          // LLM + retrieval can take longer
+          timeout: 30000,
+        }
+      );
+      return result;
+    } catch (error) {
+      console.error('Chatbot chat error:', error);
+      throw error;
+    }
+  }
+
+  async chatbotHealthCheck() {
+    try {
+      const result = await this.axiosInstance.get('/api/chatbot/health');
+      return result;
+    } catch (error) {
+      console.error('Chatbot health check error:', error);
+      throw error;
+    }
+  }
   // Quiz APIs
   async getQuizTopics() {
     try {
@@ -896,6 +1049,18 @@ class ApiService {
       }
       throw error;
     }
+  }
+
+  async getSuperadminAllStudents() {
+    return await this.axiosInstance.get('/auth/superadmin/all-students', {
+      timeout: 30000,
+    });
+  }
+
+  async getSuperadminGlobalLeaderboard() {
+    return await this.axiosInstance.get('/auth/superadmin/global-leaderboard', {
+      timeout: 30000,
+    });
   }
 }
 

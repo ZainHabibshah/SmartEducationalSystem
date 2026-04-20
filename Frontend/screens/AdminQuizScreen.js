@@ -90,8 +90,12 @@ export default function AdminQuizScreen() {
 
     const loadAdminData = async () => {
         try {
-            const id = await AsyncStorage.getItem('admin_id');
-            const course = await AsyncStorage.getItem('admin_course');
+            const id =
+                (await AsyncStorage.getItem('admin_id')) ||
+                (await AsyncStorage.getItem('teacher_id'));
+            const course =
+                (await AsyncStorage.getItem('admin_course')) ||
+                (await AsyncStorage.getItem('teacher_course'));
             setAdminId(id);
             setAdminCourse(course);
         } catch (error) {
@@ -499,7 +503,12 @@ export default function AdminQuizScreen() {
                 )}
             </ScrollView>
 
-            <BottomNav currentRoute="/admin/quiz" />
+            <BottomNav
+                onPressHome={() => router.push('/admin')}
+                onPressNotifications={() => router.push('/admin/notification')}
+                onPressChatbot={() => router.push('/admin/chatbot')}
+                onPressSettings={() => router.push('/admin/settings')}
+            />
 
             {/* Confirmation Modal */}
             <Modal visible={confirmModalVisible} animationType="fade" transparent>

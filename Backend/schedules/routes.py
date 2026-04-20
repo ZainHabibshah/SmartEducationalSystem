@@ -9,6 +9,13 @@ import json
 import traceback
 from datetime import datetime
 from werkzeug.utils import secure_filename
+try:
+    from pypdf import PdfReader
+except Exception:
+    try:
+        from PyPDF2 import PdfReader
+    except Exception:
+        PdfReader = None
 
 # Configure Tesseract (native binary) - simple path detection
 try:
@@ -178,6 +185,28 @@ def extract_text_from_image(image_path):
         traceback.print_exc()
         return None
 
+def extract_text_from_pdf(pdf_path):
+    """Extract text from PDF for embeddings generation."""
+    try:
+        if PdfReader is None:
+            print("⚠️  PDF reader library not available (install pypdf)")
+            return None
+        reader = PdfReader(pdf_path)
+        pages_text = []
+        for page in reader.pages:
+            page_text = page.extract_text() or ""
+            if page_text.strip():
+                pages_text.append(page_text.strip())
+        merged = "\n".join(pages_text).strip()
+        if merged:
+            print(f"✅ Extracted {len(merged)} characters from PDF")
+            return merged
+        print("⚠️  PDF text extraction returned empty content")
+        return None
+    except Exception as e:
+        print(f"⚠️  PDF extraction failed: {e}")
+        return None
+
 def generate_embeddings(text):
     """Generate embeddings from text"""
     try:
@@ -294,14 +323,18 @@ def upload_schedule():
             print(f"✅ Schedule saved: {filepath}")
             print(f"📊 File size: {os.path.getsize(filepath)} bytes")
             
-            # Try to extract text and generate embeddings (for images only)
+            # Try to extract text and generate embeddings
             extracted_text = None
             embeddings_filename = None
             
-            if get_file_type(filename) == 'image':
+            detected_file_type = get_file_type(filename)
+            if detected_file_type in {'image', 'pdf'}:
                 try:
-                    # Extract text from image (optional)
-                    extracted_text = extract_text_from_image(filepath)
+                    # Extract text based on file type (optional)
+                    if detected_file_type == 'image':
+                        extracted_text = extract_text_from_image(filepath)
+                    else:
+                        extracted_text = extract_text_from_pdf(filepath)
                     
                     if extracted_text:
                         print(f"✅ Extracted {len(extracted_text)} characters of text")
@@ -325,7 +358,7 @@ def upload_schedule():
                         else:
                             print("⚠️  Could not generate embeddings (model not available)")
                     else:
-                        print("⚠️  Could not extract text from image (OCR failed or Tesseract not installed)")
+                        print("⚠️  Could not extract text from uploaded schedule file")
                 except Exception as e:
                     print(f"⚠️  OCR/Embedding processing failed (non-critical): {e}")
                     traceback.print_exc()
@@ -484,6 +517,26 @@ def delete_schedule(filename):
         # Delete the file
         os.remove(filepath)
         print(f"✅ Deleted schedule: {filepath}")
+
+        # Delete related embeddings file if present
+        try:
+            embeddings_folder = os.path.join(current_app.config['SCHEDULES_UPLOAD_FOLDER'], '..', 'embeddings', 'schedules')
+            embeddings_filename = filename.replace('.', '_') + '_embeddings.txt'
+            embeddings_path = os.path.join(embeddings_folder, embeddings_filename)
+            if os.path.exists(embeddings_path):
+                os.remove(embeddings_path)
+                print(f"✅ Deleted schedule embeddings file: {embeddings_path}")
+        except Exception as emb_err:
+            print(f"⚠️  Could not remove schedule embeddings file for {filename}: {emb_err}")
+
+        # Remove corresponding vectors from chatbot Chroma store
+        try:
+            from chatbot.routes import get_rag_pipeline
+            pipeline = get_rag_pipeline()
+            if pipeline:
+                pipeline.remove_vectors_for_file(source="schedule", upload_filename=filename)
+        except Exception as vec_err:
+            print(f"⚠️  Could not remove schedule vectors for {filename}: {vec_err}")
         
         return jsonify({
             'success': True,
