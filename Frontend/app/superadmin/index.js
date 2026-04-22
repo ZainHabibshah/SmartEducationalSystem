@@ -31,50 +31,59 @@ export default function SuperAdminDashboard() {
     loadEducationalNews();
   }, []);
 
-  const loadEducationalNews = async () => {
-    try {
-      const cachedNews = await AsyncStorage.getItem('educational_news');
-      const cachedDate = await AsyncStorage.getItem('news_cached_date');
-      const now = new Date();
-      let shouldFetchNew = true;
-
-      if (cachedNews && cachedDate) {
-        const cacheDate = new Date(cachedDate);
-        const hoursDiff = (now - cacheDate) / (1000 * 60 * 60);
-        if (hoursDiff < 24) {
-          setNewsData(JSON.parse(cachedNews));
-          shouldFetchNew = false;
-        }
-      }
-
-      if (shouldFetchNew) {
-        const result = await apiService.getEducationalNews();
-        if (result && result.success && result.news) {
-          setNewsData(result.news);
-          await AsyncStorage.setItem('educational_news', JSON.stringify(result.news));
-          await AsyncStorage.setItem('news_cached_date', now.toISOString());
-        }
-      }
-    } catch (e) {
-      const fallbackNews = [
-        {
-          id: 1,
-          title: 'AI and Machine Learning Revolutionizing Modern Education',
-          url: 'https://www.edweek.org/technology/ai-in-education',
-          source: 'Education Week',
-          publishedAt: new Date().toISOString(),
-        },
-        {
-          id: 2,
-          title: 'Digital Literacy: Essential Skills for 21st Century Students',
-          url: 'https://www.edsurge.com/news/digital-literacy',
-          source: 'EdSurge',
-          publishedAt: new Date().toISOString(),
-        },
-      ];
-      setNewsData(fallbackNews);
+  const FALLBACK_NEWS = [
+    {
+        id: 1,
+        title: "AI and Machine Learning Revolutionizing Modern Education",
+        url: "https://www.edweek.org/technology/ai-in-education",
+        source: "Education Week",
+        publishedAt: new Date().toISOString()
+    },
+    {
+        id: 2,
+        title: "Digital Literacy: Essential Skills for 21st Century Students",
+        url: "https://www.edsurge.com/news/digital-literacy",
+        source: "EdSurge",
+        publishedAt: new Date().toISOString()
+    },
+    {
+        id: 3,
+        title: "Hybrid Learning Models Show Promising Results",
+        url: "https://www.insidehighered.com/news/hybrid-learning",
+        source: "Inside Higher Ed",
+        publishedAt: new Date().toISOString()
+    },
+    {
+        id: 4,
+        title: "Student Mental Health Support Gains Priority in Schools",
+        url: "https://www.edutopia.org/student-mental-health",
+        source: "Edutopia",
+        publishedAt: new Date().toISOString()
+    },
+    {
+        id: 5,
+        title: "STEM Education Initiatives Drive Student Success",
+        url: "https://www.scientificamerican.com/education/stem",
+        source: "Scientific American",
+        publishedAt: new Date().toISOString()
     }
-  };
+];
+
+const loadEducationalNews = async () => {
+  try {
+      const result = await apiService.getEducationalNews();
+
+      if (result && result.success && result.news && result.news.length > 0) {
+          setNewsData(result.news);
+      } else {
+          // ⚠️ THIS SHOULD TRIGGER
+          setNewsData(FALLBACK_NEWS);
+      }
+  } catch (error) {
+      // ⚠️ THIS SHOULD TRIGGER
+      setNewsData(FALLBACK_NEWS);
+  }
+};
 
   // Intentionally removed "Students" and "Leaderboard" quick-actions
   // from the Super Admin dashboard per requirements.

@@ -13,6 +13,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
+import BottomNav from '../../components/BottomNav';
 import OTPModal from '../../components/OTPModal';
 import UploadConfirmationModal from '../../components/UploadConfirmationModal';
 import { COLORS } from '../../constants/colors';
@@ -358,6 +359,12 @@ export default function AddStudentScreen() {
     };
 
     // OTP flow removed for add-student; backend is protected by admin JWT.
+    const go = (key) => {
+        if (key === 'home') router.push('/admin');
+        if (key === 'bell') router.push('/admin/notification');
+        if (key === 'chatbot') router.push('/admin/chatbot');
+        if (key === 'settings') router.push('/admin/settings');
+    };
 
     return (
         <View style={styles.container}>
@@ -524,6 +531,13 @@ export default function AddStudentScreen() {
                 </Animated.View>
             </ScrollView>
 
+            <BottomNav
+                onPressHome={() => go('home')}
+                onPressNotifications={() => go('bell')}
+                onPressChatbot={() => go('chatbot')}
+                onPressSettings={() => go('settings')}
+            />
+
             {/* Confirmation Modal */}
             <UploadConfirmationModal
                 visible={showConfirmationModal}
@@ -596,7 +610,8 @@ const styles = StyleSheet.create({
         padding: 20,
     },
     formContent: {
-        paddingBottom: 20,
+        // Leave space so fields/buttons are not hidden behind BottomNav
+        paddingBottom: Math.max(180, height * 0.18),
     },
     formCard: {
         backgroundColor: '#fff',

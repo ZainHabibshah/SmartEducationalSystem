@@ -882,7 +882,7 @@ class RAGPipeline:
                 names.append(orig)
         return "\n\n".join(parts).strip(), names
 
-    def answer_course_materials_question(self, question: str, user_course: Optional[str]) -> Dict:
+    def answer_course_materials_question(self, question: str, user_course: Optional[str], student_mode: bool = False) -> Dict:
         """
         /course intent: match query to embeddings; if match is strong, use retrieved chunks for the LLM.
         If match is weak, skip chunk context and pass concatenated full file text (truncated) to the LLM.
@@ -941,13 +941,20 @@ class RAGPipeline:
                 source_files = file_names
 
         if not context.strip():
-            solo = self._query_general_llm(question)
-            return {
-                "answer": self._sanitize_chatbot_answer(solo)
-                or "No course materials are uploaded yet, and I could not generate an answer.",
+            if student_mode:
+               return {
+                "answer": "No course materials have been uploaded yet. Please ask your admin to upload files before using /course.",
                 "query_type": "course_no_uploads",
                 "sources": [],
-            }
+               }
+            else:
+                solo = self._query_general_llm(question)
+                return {
+                    "answer": self._sanitize_chatbot_answer(solo)
+                    or "No course materials are uploaded yet, and I could not generate an answer.",
+                    "query_type": "course_no_uploads",
+                    "sources": [],
+               }
 
         solo = self._query_general_llm(question)
         solo = self._sanitize_chatbot_answer(solo) or ""

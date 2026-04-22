@@ -36,9 +36,9 @@ def _new_mongo_client(mongo_uri: str):
     return MongoClient(
         mongo_uri,
         # Keep auth endpoints responsive when Atlas is unreachable.
-        serverSelectionTimeoutMS=5000,
-        connectTimeoutMS=5000,
-        socketTimeoutMS=8000,
+        serverSelectionTimeoutMS=30000,
+        connectTimeoutMS=30000,
+        socketTimeoutMS=30000,
         tls=True,
         tlsCAFile=certifi.where(),
         retryWrites=True,

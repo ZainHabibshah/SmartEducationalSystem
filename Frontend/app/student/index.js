@@ -70,83 +70,61 @@ export default function StudentDashboard() {
         }
     };
 
+    const FALLBACK_NEWS = [
+        {
+            id: 1,
+            title: "AI and Machine Learning Revolutionizing Modern Education",
+            url: "https://www.edweek.org/technology/ai-in-education",
+            source: "Education Week",
+            publishedAt: new Date().toISOString()
+        },
+        {
+            id: 2,
+            title: "Digital Literacy: Essential Skills for 21st Century Students",
+            url: "https://www.edsurge.com/news/digital-literacy",
+            source: "EdSurge",
+            publishedAt: new Date().toISOString()
+        },
+        {
+            id: 3,
+            title: "Hybrid Learning Models Show Promising Results",
+            url: "https://www.insidehighered.com/news/hybrid-learning",
+            source: "Inside Higher Ed",
+            publishedAt: new Date().toISOString()
+        },
+        {
+            id: 4,
+            title: "Student Mental Health Support Gains Priority in Schools",
+            url: "https://www.edutopia.org/student-mental-health",
+            source: "Edutopia",
+            publishedAt: new Date().toISOString()
+        },
+        {
+            id: 5,
+            title: "STEM Education Initiatives Drive Student Success",
+            url: "https://www.scientificamerican.com/education/stem",
+            source: "Scientific American",
+            publishedAt: new Date().toISOString()
+        }
+    ];
+
     const loadEducationalNews = async () => {
         try {
-            // Check if we have cached news and if it's still fresh (< 24 hours)
-            const cachedNews = await AsyncStorage.getItem('educational_news');
-            const cachedDate = await AsyncStorage.getItem('news_cached_date');
+            console.log('📰 Fetching educational news from backend...');
+            const result = await apiService.getEducationalNews();
             
-            const now = new Date();
-            let shouldFetchNew = true;
-            
-            if (cachedNews && cachedDate) {
-                const cacheDate = new Date(cachedDate);
-                const hoursDiff = (now - cacheDate) / (1000 * 60 * 60);
-                
-                // Use cache if less than 24 hours old
-                if (hoursDiff < 24) {
-                    setEducationalNews(JSON.parse(cachedNews));
-                    console.log('📰 Using cached news (fresh)');
-                    shouldFetchNew = false;
-                }
-            }
-            
-            // Fetch new news if cache is old or doesn't exist
-            if (shouldFetchNew) {
-                console.log('📰 Fetching fresh educational news...');
-                const result = await apiService.getEducationalNews();
-                
-                if (result && result.success && result.news) {
-                    setEducationalNews(result.news);
-                    
-                    // Cache the news data
-                    await AsyncStorage.setItem('educational_news', JSON.stringify(result.news));
-                    await AsyncStorage.setItem('news_cached_date', now.toISOString());
-                    
-                    console.log('✅ Fetched and cached educational news');
-                }
+            if (result && result.success && result.news && result.news.length > 0) {
+                setEducationalNews(result.news);
+                console.log('✅ Loaded news from backend (MongoDB cached)');
+            } else {
+                // Backend returned success but empty news – use fallback
+                console.warn('⚠️ Backend returned empty news, using fallback');
+                setEducationalNews(FALLBACK_NEWS);
             }
         } catch (error) {
-            console.error('Error loading educational news:', error);
-            // Use fallback news if API fails
-            const fallbackNews = [
-                {
-                    id: 1,
-                    title: "AI and Machine Learning Revolutionizing Modern Education",
-                    url: "https://www.edweek.org/technology/ai-in-education",
-                    source: "Education Week",
-                    publishedAt: new Date().toISOString()
-                },
-                {
-                    id: 2,
-                    title: "Digital Literacy: Essential Skills for 21st Century Students",
-                    url: "https://www.edsurge.com/news/digital-literacy",
-                    source: "EdSurge",
-                    publishedAt: new Date().toISOString()
-                },
-                {
-                    id: 3,
-                    title: "Hybrid Learning Models Show Promising Results",
-                    url: "https://www.insidehighered.com/news/hybrid-learning",
-                    source: "Inside Higher Ed",
-                    publishedAt: new Date().toISOString()
-                },
-                {
-                    id: 4,
-                    title: "Student Mental Health Support Gains Priority in Schools",
-                    url: "https://www.edutopia.org/student-mental-health",
-                    source: "Edutopia",
-                    publishedAt: new Date().toISOString()
-                },
-                {
-                    id: 5,
-                    title: "STEM Education Initiatives Drive Student Success",
-                    url: "https://www.scientificamerican.com/education/stem",
-                    source: "Scientific American",
-                    publishedAt: new Date().toISOString()
-                }
-            ];
-            setEducationalNews(fallbackNews);
+            console.error('❌ Network error loading educational news:', error);
+            // Only use fallback when backend is unreachable
+            setEducationalNews(FALLBACK_NEWS);
         }
     };
 
