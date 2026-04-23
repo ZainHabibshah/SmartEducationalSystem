@@ -139,6 +139,7 @@ ADMIN_STUDENT_QUERY_MAX_DOCS = int(os.getenv("ADMIN_STUDENT_QUERY_MAX_DOCS", "25
 BACKEND_PUBLIC_BASE_URL = (os.getenv("BACKEND_PUBLIC_BASE_URL", "http://127.0.0.1:5000") or "http://127.0.0.1:5000").rstrip("/")
 # /course mode: Chroma distance below this => use retrieved chunks; else inject full raw file text (truncated).
 COURSE_MATERIAL_RAG_MAX_DISTANCE = float(os.getenv("COURSE_MATERIAL_RAG_MAX_DISTANCE", "0.45"))
+COURSE_MATERIAL_RELATED_MAX_DISTANCE = float(os.getenv("COURSE_MATERIAL_RELATED_MAX_DISTANCE", "0.80"))
 COURSE_MATERIAL_FULL_CONTEXT_MAX_CHARS = int(os.getenv("COURSE_MATERIAL_FULL_CONTEXT_MAX_CHARS", "120000"))
 MAX_COURSE_MATERIAL_FILES = 6
 VALID_COURSE_KEYS = frozenset({"computerScience", "chemistry", "physics"})
@@ -882,7 +883,15 @@ class RAGPipeline:
                 names.append(orig)
         return "\n\n".join(parts).strip(), names
 
-    def answer_course_materials_question(self, question: str, user_course: Optional[str], student_mode: bool = False) -> Dict:
+    def answer_course_materials_question(
+        self,
+        question: str,
+        user_course: Optional[str],
+        db=None,
+        user_email: Optional[str] = None,
+        user_role: Optional[str] = None,
+        student_mode: bool = False,
+    ) -> Dict:
         """
         /course intent: match query to embeddings; if match is strong, use retrieved chunks for the LLM.
         If match is weak, skip chunk context and pass concatenated full file text (truncated) to the LLM.
@@ -901,6 +910,31 @@ class RAGPipeline:
                 "answer": "Course Q&A needs GROQ_API_KEY to be configured.",
                 "query_type": "course",
                 "sources": [],
+            }
+
+        role = (user_role or "").strip().lower()
+        uploaded_topics = self._load_user_attendance_topic_names(
+            db=db,
+            user_email=user_email or "",
+            user_role=role,
+            user_course=user_course,
+        ) if db is not None and role in {"admin", "student"} else []
+        manifest_entries = self._load_course_material_manifest_entries(user_course)
+        uploaded_material_names = []
+        for entry in manifest_entries:
+            name = (entry.get("original_filename") or entry.get("saved_as") or "").strip()
+            if name and name not in uploaded_material_names:
+                uploaded_material_names.append(name)
+
+        if self._is_topic_listing_question(question):
+            topic_text = self._format_topic_list_response(uploaded_topics, user_role=role if role in {"admin", "student"} else "student")
+            if uploaded_material_names:
+                materials_block = "\n".join([f"- {n}" for n in uploaded_material_names[:20]])
+                topic_text += f"\n\nUploaded course files you can ask from:\n{materials_block}"
+            return {
+                "answer": topic_text,
+                "query_type": "course_topics_list",
+                "sources": ["attendance_topics", "course_materials"],
             }
 
         store = self._get_course_material_store(user_course)
@@ -940,43 +974,54 @@ class RAGPipeline:
             if file_names:
                 source_files = file_names
 
-        if not context.strip():
-            if student_mode:
-               return {
-                "answer": "No course materials have been uploaded yet. Please ask your admin to upload files before using /course.",
+        topics_only_scope = bool(uploaded_topics) and self._is_related_to_uploaded_topics(question, uploaded_topics)
+        files_only_scope = False
+        if best_distance is not None:
+            files_only_scope = best_distance <= COURSE_MATERIAL_RELATED_MAX_DISTANCE
+        elif context.strip():
+            files_only_scope = self._has_min_context_overlap(question, context)
+
+        if not context.strip() and not uploaded_topics:
+            return {
+                "answer": "No course files or attendance topics are uploaded yet for your course. Please ask your admin to upload them before using /course.",
                 "query_type": "course_no_uploads",
                 "sources": [],
-               }
-            else:
-                solo = self._query_general_llm(question)
-                return {
-                    "answer": self._sanitize_chatbot_answer(solo)
-                    or "No course materials are uploaded yet, and I could not generate an answer.",
-                    "query_type": "course_no_uploads",
-                    "sources": [],
-               }
+            }
 
+        if not files_only_scope and not topics_only_scope:
+            return {
+                "answer": "This question is outside your uploaded course files and attendance topics.",
+                "query_type": "course_out_of_scope",
+                "sources": ["course_materials", "attendance_topics"],
+            }
+
+        topics_context = ", ".join(uploaded_topics[:80]) if uploaded_topics else "None uploaded"
+        materials_context = ", ".join(uploaded_material_names[:40]) if uploaded_material_names else "None uploaded"
         solo = self._query_general_llm(question)
         solo = self._sanitize_chatbot_answer(solo) or ""
 
         dual_prompt = (
-            "You help students compare official course uploads with general AI explanations.\n"
+            "You are a strict course assistant.\n"
             "Respond using EXACTLY these two markdown sections (with these headings):\n\n"
-            "### From uploaded course materials (PDF / slides / documents)\n"
-            "Summarize or quote ONLY from the context below (from the instructor's uploads). "
-            "If the context does not contain relevant information, say so clearly.\n\n"
-            "### General explanation (AI model — not from uploaded files)\n"
-            "Give a clear teaching explanation from general knowledge. State that this section is not from the uploaded files.\n\n"
-            f"--- Context from uploads ---\n{context}\n--- end context ---\n\n"
-            f"Optional short model-only draft (may help tone): {solo}\n\n"
+            "### From uploaded course materials\n"
+            "Answer using ONLY the provided course uploads context and uploaded attendance topic names.\n"
+            "If the upload context does not contain enough detail, clearly say what is missing.\n\n"
+            "### General explanation (AI model)\n"
+            "Give a short teaching explanation from general knowledge.\n\n"
+            "Scope rule: the user question is already in-scope to uploaded course files/topics.\n"
+            "Do not change the topic.\n\n"
+            f"Uploaded attendance topic names: {topics_context}\n"
+            f"Uploaded course file names: {materials_context}\n\n"
+            f"--- Course uploads context ---\n{context}\n--- end context ---\n\n"
+            f"Optional model-only draft: {solo}\n\n"
             f"User question: {question}\n"
         )
-        dual = self._complete_prompt(dual_prompt, max_tokens=1200)
-        dual = self._sanitize_chatbot_answer(dual) or solo or context[:500]
+        scoped_answer = self._complete_prompt(dual_prompt, max_tokens=1200)
+        scoped_answer = self._sanitize_chatbot_answer(scoped_answer) or solo or context[:500]
         return {
-            "answer": dual,
+            "answer": scoped_answer,
             "query_type": mode,
-            "sources": source_files or ["course_materials"],
+            "sources": source_files or (["attendance_topics"] if uploaded_topics else ["course_materials"]),
             "retrieval_distance": best_distance,
         }
 
@@ -1307,6 +1352,30 @@ class RAGPipeline:
         for base, hints in bridges.items():
             if any(base in (t or "").lower() for t in uploaded_topics):
                 if any(h in q_norm for h in hints):
+                    return True
+        return False
+
+    def _has_min_context_overlap(self, question: str, context: str, min_hits: int = 2) -> bool:
+        """
+        Lightweight lexical scope guard for /course questions.
+        Used when vector distance is unavailable/weak.
+        """
+        q = (question or "").lower()
+        c = (context or "").lower()
+        if not q or not c:
+            return False
+        q_tokens = [t for t in re.split(r"[^a-z0-9]+", q) if len(t) >= 4]
+        if not q_tokens:
+            return False
+        hits = 0
+        seen = set()
+        for tok in q_tokens:
+            if tok in seen:
+                continue
+            seen.add(tok)
+            if tok in c:
+                hits += 1
+                if hits >= min_hits:
                     return True
         return False
 
@@ -2558,7 +2627,14 @@ Answer:"""
                                 "query_type": "file_download",
                                 "sources": ["course_materials"],
                             }
-                    cm = self.answer_course_materials_question(question, user_course)
+                    cm = self.answer_course_materials_question(
+                        question=question,
+                        user_course=user_course,
+                        db=db,
+                        user_email=user_email,
+                        user_role=user_role,
+                        student_mode=True,
+                    )
                     return {
                         "answer": cm.get("answer", ""),
                         "query_type": cm.get("query_type", "course"),
@@ -2701,7 +2777,14 @@ Answer:"""
                             "query_type": "file_download",
                             "sources": ["course_materials"],
                         }
-                cm = self.answer_course_materials_question(question, user_course)
+                cm = self.answer_course_materials_question(
+                    question=question,
+                    user_course=user_course,
+                    db=db,
+                    user_email=user_email,
+                    user_role=user_role,
+                    student_mode=False,
+                )
                 return {
                     "answer": cm.get("answer", ""),
                     "query_type": cm.get("query_type", "course"),

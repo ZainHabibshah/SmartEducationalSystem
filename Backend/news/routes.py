@@ -141,6 +141,38 @@ def _load_cached_doc(db):
         return None
 
 
+def _normalize_news_items(items, max_items: int = 5):
+    """
+    Normalize news list shape and keep dashboard payload stable.
+    Guarantees sequential ids and required keys.
+    """
+    out = []
+    for item in (items or []):
+        if not isinstance(item, dict):
+            continue
+        title = (item.get("title") or "").strip()
+        url = (item.get("url") or "").strip()
+        if not title or not url:
+            continue
+        out.append({
+            "id": len(out) + 1,
+            "title": title[:240],
+            "url": url,
+            "source": (item.get("source") or "Unknown").strip()[:120],
+            "publishedAt": (item.get("publishedAt") or "").strip()[:80],
+            "description": (item.get("description") or "").strip()[:500],
+        })
+        if len(out) >= max_items:
+            break
+    return out
+
+
+def _cached_items_are_usable(doc) -> bool:
+    """Cache is usable only when it has at least 5 valid news items."""
+    items = _normalize_news_items((doc or {}).get("items") or [], max_items=5)
+    return len(items) >= 5
+
+
 def _is_doc_fresh(doc) -> bool:
     if not doc:
         return False
@@ -617,6 +649,50 @@ def _build_daily_news_items():
         })
     return _ensure_source_diversity(out, candidates)
 
+
+def refresh_daily_news_on_startup():
+    """
+    Startup hook:
+    - If 24h cache is still valid and usable: keep existing news.
+    - If expired/invalid: fetch fresh news and replace DB document.
+    """
+    try:
+        db = connect_to_mongodb()
+        if db is None:
+            print("⚠️  News startup check: MongoDB not available. Skipping news refresh.")
+            return
+
+        cached = _load_cached_doc(db)
+        if _is_doc_fresh(cached) and _cached_items_are_usable(cached):
+            print("📰 News startup check: 24 hours are not complete, cached news are good.")
+            return
+
+        print("📰 News startup check: 24 hours complete (or cache invalid). Fetching news...")
+        news_data = _normalize_news_items(_build_daily_news_items(), max_items=5)
+        if len(news_data) < 5:
+            news_data = _normalize_news_items(FALLBACK_NEWS, max_items=5)
+        print("✅ News startup check: News fetched.")
+
+        now = _now_utc()
+        expires = now + timedelta(hours=DAILY_NEWS_TTL_HOURS)
+        doc = {
+            "_id": DAILY_NEWS_DOC_ID,
+            "items": news_data[:5],
+            "last_updated": _dt_to_iso(now),
+            "expires_at": _dt_to_iso(expires),
+            "ttl_hours": DAILY_NEWS_TTL_HOURS,
+            "sources": {
+                "rss": [u for _, u in RSS_SOURCES],
+                "html": [u for _, u in HTML_SOURCES],
+            },
+        }
+        # Full replace makes old payload/data fields effectively removed.
+        _news_collection(db).replace_one({"_id": DAILY_NEWS_DOC_ID}, doc, upsert=True)
+        print("✅ News startup check: News saved to database.")
+    except Exception as e:
+        print(f"⚠️  News startup check failed: {e}")
+        traceback.print_exc()
+
 @news_bp.route('/educational-news', methods=['GET'])
 def get_educational_news():
     """
@@ -632,18 +708,21 @@ def get_educational_news():
         force_refresh = (request.args.get("force_refresh") or "").strip() in {"1", "true", "True", "yes", "YES"}
 
         cached = _load_cached_doc(db)
-        if (not force_refresh) and _is_doc_fresh(cached):
-            news_data = cached.get("items") or []
+        if (not force_refresh) and _is_doc_fresh(cached) and _cached_items_are_usable(cached):
+            news_data = _normalize_news_items(cached.get("items") or [], max_items=5)
             last_updated = cached.get("last_updated")
         else:
             print("📰 Refreshing daily educational news (24h cache expired or forced)...")
-            news_data = _build_daily_news_items()
+            news_data = _normalize_news_items(_build_daily_news_items(), max_items=5)
+            if len(news_data) < 5:
+                # Keep dashboard stable even when network fetches are weak.
+                news_data = _normalize_news_items(FALLBACK_NEWS, max_items=5)
             now = _now_utc()
             expires = now + timedelta(hours=DAILY_NEWS_TTL_HOURS)
 
             doc = {
                 "_id": DAILY_NEWS_DOC_ID,
-                "items": news_data,
+                "items": news_data[:5],
                 "last_updated": _dt_to_iso(now),
                 "expires_at": _dt_to_iso(expires),
                 "ttl_hours": DAILY_NEWS_TTL_HOURS,
@@ -661,8 +740,8 @@ def get_educational_news():
 
         return jsonify({
             'success': True,
-            'news': news_data,
-            'count': len(news_data),
+            'news': news_data[:5],
+            'count': len(news_data[:5]),
             'last_updated': last_updated
         }), 200
         
@@ -672,8 +751,8 @@ def get_educational_news():
         # Return fallback news even on error
         return jsonify({
             'success': True,
-            'news': FALLBACK_NEWS,
-            'count': len(FALLBACK_NEWS),
+            'news': _normalize_news_items(FALLBACK_NEWS, max_items=5),
+            'count': 5,
             'last_updated': datetime.now().isoformat()
         }), 200
 
