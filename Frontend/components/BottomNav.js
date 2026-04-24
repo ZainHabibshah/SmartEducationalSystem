@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { Dimensions, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { height } = Dimensions.get('window');
 
@@ -9,9 +10,10 @@ const COLORS = {
 };
 
 export default function BottomNav({ onPressHome, onPressNotifications, onPressChatbot, onPressSettings }) {
+    const insets = useSafeAreaInsets();
     return (
         <View style={styles.bottomSection}>
-            <View style={styles.bottomContainer}>
+            <View style={[styles.bottomContainer, { paddingBottom: Math.max(14, insets.bottom + 6) }]}>
                 <TouchableOpacity style={styles.bottomIcon} onPress={onPressHome} activeOpacity={0.8}>
                     <Ionicons name="home" size={24} color={COLORS.inputBg} />
                 </TouchableOpacity>
@@ -47,12 +49,14 @@ const styles = StyleSheet.create({
         elevation: 8,
     },
     bottomContainer: {
+        width: '100%',
+        maxWidth: 480,
+        alignSelf: 'center',
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-evenly',
-        paddingHorizontal: 20,
-        paddingTop: 20,
-        paddingBottom: 30,
+        paddingHorizontal: 16,
+        paddingTop: 14,
         flex: 1,
     },
     bottomIcon: {

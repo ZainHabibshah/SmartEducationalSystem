@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Dimensions, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width, height } = Dimensions.get('window');
 
@@ -33,6 +34,7 @@ export default function DashboardLayout({
 	/** Optional content rendered after the news card and before the grid (e.g. super admin actions). */
 	belowNews = null,
 }) {
+	const insets = useSafeAreaInsets();
 	const [currentNewsIndex, setCurrentNewsIndex] = useState(0);
 	const slideAnim = useRef(new Animated.Value(-100)).current;
 	const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -132,6 +134,7 @@ export default function DashboardLayout({
 			<Animated.View 
 				style={[
 					styles.topSection,
+					{ paddingTop: Math.max(18, insets.top + 6) },
 					{
 						transform: [{ translateY: slideAnim }],
 						opacity: fadeAnim,
@@ -201,7 +204,7 @@ export default function DashboardLayout({
 			<View style={styles.middleSection}>
 				<ScrollView
 					showsVerticalScrollIndicator={false}
-					contentContainerStyle={styles.middleContent}
+					contentContainerStyle={[styles.middleContent, { paddingBottom: Math.max(height * 0.2, insets.bottom + 110) }]}
 				>
 				{showNews && (
 					<View style={styles.newsCard}>
@@ -330,7 +333,7 @@ export default function DashboardLayout({
 					}
 				]}
 			>
-				<View style={styles.bottomContainer}>
+				<View style={[styles.bottomContainer, { paddingBottom: Math.max(14, insets.bottom + 6) }]}>
 					{bottomIcons.map((bi, index) => (
 						<Animated.View
 							key={bi.key}
@@ -370,7 +373,6 @@ const styles = StyleSheet.create({
 		height: height * 0.25,
 		backgroundColor: COLORS.inputBg,
 		paddingHorizontal: 20,
-		paddingTop: Math.max(20, height * 0.03),
 		justifyContent: 'center',
 		borderBottomLeftRadius: 25,
 		borderBottomRightRadius: 25,
@@ -478,10 +480,13 @@ const styles = StyleSheet.create({
 	middleSection: {
 		flex: 1,
 		backgroundColor: 'transparent',
-		padding: 15,
+		paddingVertical: 12,
+		paddingHorizontal: 12,
 	},
 	middleContent: {
-		paddingBottom: height * 0.2,
+		width: '100%',
+		maxWidth: 520,
+		alignSelf: 'center',
 	},
 	newsCard: {
 		width: '100%',
@@ -717,12 +722,14 @@ const styles = StyleSheet.create({
 		elevation: 8,
 	},
 	bottomContainer: {
+		width: '100%',
+		maxWidth: 520,
+		alignSelf: 'center',
 		flexDirection: 'row',
 		alignItems: 'center',
 		justifyContent: 'space-evenly',
-		paddingHorizontal: 20,
-		paddingTop: 20,
-		paddingBottom: 30,
+		paddingHorizontal: 16,
+		paddingTop: 14,
 		flex: 1,
 	},
 	bottomIcon: {

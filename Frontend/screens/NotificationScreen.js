@@ -40,6 +40,37 @@ export default function NotificationScreen() {
     const [showSingleDropdown, setShowSingleDropdown] = useState(false);
     const [showGroupDropdown, setShowGroupDropdown] = useState(null); // Tracks which group input is active
     const [filteredStudents, setFilteredStudents] = useState([]);
+    const [userRole, setUserRole] = useState('admin');
+    const [teacherInbox, setTeacherInbox] = useState([]);
+    const [loadingTeacherInbox, setLoadingTeacherInbox] = useState(false);
+    const [markingReadId, setMarkingReadId] = useState('');
+
+    const normalizeHistoryEntry = (entry, index) => {
+        if (!entry || typeof entry !== 'object') {
+            return null;
+        }
+
+        const rawRecipients = entry.recipients;
+        const recipients = Array.isArray(rawRecipients)
+            ? rawRecipients.filter(Boolean).map((recipient) => String(recipient))
+            : rawRecipients
+                ? [String(rawRecipients)]
+                : [];
+
+        const createdAtRaw = entry.createdAt || entry.date || '';
+        const createdAtDate = new Date(createdAtRaw);
+        const createdAt = Number.isNaN(createdAtDate.getTime())
+            ? new Date().toISOString()
+            : createdAtDate.toISOString();
+
+        return {
+            id: String(entry.id || createdAtRaw || `history-${index}`),
+            message: String(entry.message || ''),
+            recipientType: String(entry.recipientType || entry.recipient_type || 'class'),
+            recipients,
+            createdAt,
+        };
+    };
 
     const handleBottomPress = (key) => {
         if (key === 'home') {
@@ -228,14 +259,60 @@ export default function NotificationScreen() {
         try {
             setLoading(true);
             const result = await apiService.getAdminNotificationHistory();
-            if (result && result.success && result.history) {
-                setHistory(result.history);
-                console.log(`📜 Loaded ${result.history.length} notification history entries`);
+            if (result && result.success && Array.isArray(result.history)) {
+                const safeHistory = result.history
+                    .map((entry, index) => normalizeHistoryEntry(entry, index))
+                    .filter(Boolean);
+                setHistory(safeHistory);
+                console.log(`📜 Loaded ${safeHistory.length} notification history entries`);
+            } else {
+                setHistory([]);
             }
         } catch (error) {
             console.error('Error loading notification history:', error);
+            setHistory([]);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const loadTeacherInbox = async () => {
+        try {
+            setLoadingTeacherInbox(true);
+            const result = await apiService.getTeacherNotifications();
+            if (result && result.success && Array.isArray(result.notifications)) {
+                setTeacherInbox(result.notifications);
+            } else {
+                setTeacherInbox([]);
+            }
+        } catch (error) {
+            console.error('Error loading teacher inbox:', error);
+            setTeacherInbox([]);
+        } finally {
+            setLoadingTeacherInbox(false);
+        }
+    };
+
+    const markTeacherNotificationAsRead = async (notificationId) => {
+        if (!notificationId || markingReadId === notificationId) return;
+        try {
+            setMarkingReadId(notificationId);
+            await apiService.markTeacherNotificationRead(notificationId);
+            setTeacherInbox((prev) =>
+                prev.map((item) =>
+                    item?.id === notificationId
+                        ? {
+                              ...item,
+                              isRead: true,
+                              readAt: new Date().toISOString(),
+                          }
+                        : item
+                )
+            );
+        } catch (error) {
+            console.error('Failed to mark teacher notification as read:', error);
+        } finally {
+            setMarkingReadId('');
         }
     };
 
@@ -243,6 +320,8 @@ export default function NotificationScreen() {
         // Load admin course from storage
         const loadAdminData = async () => {
             try {
+                const role = await AsyncStorage.getItem('user_role');
+                setUserRole(role || 'admin');
                 const course = await AsyncStorage.getItem('admin_course');
                 if (course) {
                     setAdminCourse(course);
@@ -250,6 +329,9 @@ export default function NotificationScreen() {
                 // Load students and history with the course
                 await loadStudents(course || 'computerScience');
                 await loadNotificationHistory();
+                if ((role || 'admin') === 'admin') {
+                    await loadTeacherInbox();
+                }
             } catch (error) {
                 console.error('Error loading admin course:', error);
             }
@@ -260,7 +342,11 @@ export default function NotificationScreen() {
 
     const onRefresh = async () => {
         setRefreshing(true);
-        await Promise.all([loadStudents(), loadNotificationHistory()]);
+        const tasks = [loadStudents(), loadNotificationHistory()];
+        if (userRole === 'admin') {
+            tasks.push(loadTeacherInbox());
+        }
+        await Promise.all(tasks);
         setRefreshing(false);
     };
 
@@ -459,6 +545,42 @@ export default function NotificationScreen() {
                 </View>
 
 
+                {userRole === 'admin' && (
+                    <View style={[styles.card, styles.cardSpacer]}>
+                        <Text style={styles.sectionTitle}>Messages From Super Admin</Text>
+                        {loadingTeacherInbox ? (
+                            <ActivityIndicator size="small" color={COLORS.inputBg} />
+                        ) : teacherInbox.length === 0 ? (
+                            <Text style={styles.emptyText}>No notifications from super admin yet.</Text>
+                        ) : (
+                            teacherInbox.slice(0, 10).map((item, idx) => (
+                                <TouchableOpacity
+                                    key={item?.id || `inbox-${idx}`}
+                                    style={styles.historyItem}
+                                    activeOpacity={0.85}
+                                    onPress={() => !item?.isRead && markTeacherNotificationAsRead(item?.id)}
+                                >
+                                    <View style={styles.historyLeft}>
+                                        <Text style={styles.historyMessage}>{item?.message || 'No message'}</Text>
+                                        <Text style={styles.historyTime}>
+                                            {item?.date ? new Date(item.date).toLocaleString() : 'Unknown time'}
+                                        </Text>
+                                    </View>
+                                    <View style={styles.historyRight}>
+                                        <Text style={styles.historyRecipientType}>
+                                            {item?.isRead ? '✅ Read' : '🟡 Unread'}
+                                        </Text>
+                                        <Text style={styles.historyRecipients} numberOfLines={2}>
+                                            {(item?.course || '').trim() || 'N/A'}{'\n'}
+                                            {item?.isRead ? 'opened in app' : 'tap to mark read'}
+                                        </Text>
+                                    </View>
+                                </TouchableOpacity>
+                            ))
+                        )}
+                    </View>
+                )}
+
                 <View style={[styles.card, styles.cardSpacer]}>
                     <Text style={styles.sectionTitle}>Notification History</Text>
                     {history.length === 0 ? (
@@ -466,27 +588,27 @@ export default function NotificationScreen() {
                     ) : (
                         <FlatList
                             data={history}
-                            keyExtractor={(item) => item.id}
+                            keyExtractor={(item, index) => item?.id || `history-${index}`}
                             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
                             renderItem={({ item }) => (
                                 <View style={styles.historyItem}>
                                     <View style={styles.historyLeft}>
-                                        <Text style={styles.historyMessage}>{item.message}</Text>
+                                        <Text style={styles.historyMessage}>{item?.message || 'No message'}</Text>
                                         <Text style={styles.historyTime}>
-                                            {new Date(item.createdAt).toLocaleString()}
+                                            {item?.createdAt ? new Date(item.createdAt).toLocaleString() : 'Unknown time'}
                                         </Text>
                                     </View>
                                     <View style={styles.historyRight}>
                                         <Text style={styles.historyRecipientType}>
-                                            {item.recipientType === 'single' ? '👤 Single' : 
-                                             item.recipientType === 'group' ? '👥 Group' : 
+                                            {item?.recipientType === 'single' ? '👤 Single' : 
+                                             item?.recipientType === 'group' ? '👥 Group' : 
                                              '🎓 Class'}
                                         </Text>
                                         <Text style={styles.historyRecipients} numberOfLines={2}>
-                                            {Array.isArray(item.recipients) 
-                                                ? item.recipients.slice(0, 2).join(', ') + 
+                                            {Array.isArray(item?.recipients)
+                                                ? item.recipients.slice(0, 2).join(', ') +
                                                   (item.recipients.length > 2 ? ` +${item.recipients.length - 2}` : '')
-                                                : item.recipients}
+                                                : (item?.recipients || 'N/A')}
                                         </Text>
                                     </View>
                                 </View>

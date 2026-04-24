@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import BottomNav from '../../components/BottomNav';
 
 const COLORS = {
@@ -16,6 +17,7 @@ const COLORS = {
 
 export default function SuperAdminSettings() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -33,6 +35,7 @@ export default function SuperAdminSettings() {
 
   const go = (key) => {
     if (key === 'home') router.push('/superadmin');
+    if (key === 'notification') router.push('/superadmin/notification');
     if (key === 'settings') router.push('/superadmin/settings');
   };
 
@@ -63,8 +66,8 @@ export default function SuperAdminSettings() {
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <View style={styles.header}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: Math.max(40, insets.bottom + 90) }]} keyboardShouldPersistTaps="handled">
+        <View style={[styles.header, { marginTop: Math.max(10, insets.top + 6) }]}>
           <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.8}>
             <Ionicons name="chevron-back" size={24} color={COLORS.heading} />
           </TouchableOpacity>
@@ -93,7 +96,7 @@ export default function SuperAdminSettings() {
       </ScrollView>
       <BottomNav
         onPressHome={() => go('home')}
-        onPressNotifications={() => go('home')}
+        onPressNotifications={() => go('notification')}
         onPressChatbot={() => go('home')}
         onPressSettings={() => go('settings')}
       />
@@ -103,8 +106,8 @@ export default function SuperAdminSettings() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
-  content: { padding: 20, paddingBottom: 40 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, marginTop: 40 },
+  content: { width: '100%', maxWidth: 520, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 20 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
   backBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontFamily: 'Griffter', fontSize: 22, color: COLORS.heading },
   card: { backgroundColor: '#fff', borderRadius: 16, padding: 18, borderWidth: 1, borderColor: COLORS.border, marginBottom: 16 },

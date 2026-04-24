@@ -49,6 +49,8 @@ def _get_db_or_response():
 # Notification limits
 NOTIFICATION_LIMIT = 6  # Max notifications per student
 ADMIN_NOTIFICATION_HISTORY_LIMIT = 10  # Max notification history per admin
+TEACHER_NOTIFICATION_LIMIT = 20  # Max incoming notifications per teacher
+SUPERADMIN_NOTIFICATION_HISTORY_LIMIT = 10  # Max outgoing history per super admin
 
 def send_email(recipients, subject, message, email_type="notification"):
     """
@@ -74,6 +76,19 @@ Hello,
 Your instructor has sent you a new notification.
 
 Please log in to your student account to view the notification details.
+
+Best regards,
+Smart Educational System
+            """
+            msg.attach(MIMEText(email_body.strip(), 'plain'))
+        elif email_type == "superadmin_teacher_notification":
+            msg['Subject'] = "New Notification from Admin"
+            email_body = """
+Hello,
+
+You have received a new notification from Admin on your account.
+
+Please log in to your teacher account to view the notification details.
 
 Best regards,
 Smart Educational System
@@ -153,6 +168,150 @@ def add_notification_to_admin_history(admin_collection, admin_email, notificatio
         print(f"❌ Error adding notification to admin history: {e}")
         traceback.print_exc()
         return False, str(e)
+
+
+def add_notification_to_superadmin_history(superadmins_collection, superadmin_email, notification_data):
+    """Add outgoing notification to super admin history."""
+    try:
+        if superadmins_collection is None:
+            return False, "MongoDB superadmins collection not available"
+
+        superadmin = superadmins_collection.find_one({"email": superadmin_email})
+        if not superadmin:
+            return False, f"Super admin with email {superadmin_email} not found"
+
+        history_entry = {
+            'notification_id': notification_data.get('notification_id', ''),
+            'message': notification_data.get('message', ''),
+            'recipient_type': notification_data.get('recipient_type', 'single'),
+            'recipients': notification_data.get('recipients', []),
+            'course': notification_data.get('course', ''),
+            'readByTeacher': False,
+            'readAt': None,
+            'date': datetime.now().isoformat(),
+            'timestamp': datetime.now()
+        }
+
+        notification_history = superadmin.get('notification_history', [])
+        notification_history.append(history_entry)
+
+        if len(notification_history) > SUPERADMIN_NOTIFICATION_HISTORY_LIMIT:
+            notification_history.sort(key=lambda x: x.get('timestamp', datetime.min))
+            notification_history = notification_history[-SUPERADMIN_NOTIFICATION_HISTORY_LIMIT:]
+
+        result = superadmins_collection.update_one(
+            {"email": superadmin_email},
+            {'$set': {'notification_history': notification_history}}
+        )
+
+        if result.modified_count > 0 or result.matched_count > 0:
+            return True, "Notification added to super admin history"
+        return False, "Failed to update super admin document"
+    except Exception as e:
+        print(f"❌ Error adding notification to super admin history: {e}")
+        traceback.print_exc()
+        return False, str(e)
+
+
+def mark_superadmin_history_read(db, teacher_email, notification_id):
+    """Mark corresponding superadmin outgoing history item as read."""
+    try:
+        superadmins = list(db.superadmins.find({"notification_history.notification_id": notification_id}))
+        for superadmin in superadmins:
+            history = superadmin.get("notification_history", []) or []
+            changed = False
+            for entry in history:
+                if entry.get("notification_id") == notification_id:
+                    recipients = entry.get("recipients", []) or []
+                    if teacher_email in recipients:
+                        entry["readByTeacher"] = True
+                        entry["readAt"] = datetime.now().isoformat()
+                        changed = True
+            if changed:
+                db.superadmins.update_one(
+                    {"_id": superadmin["_id"]},
+                    {"$set": {"notification_history": history}}
+                )
+        return True
+    except Exception as exc:
+        print(f"⚠️ Failed to mark superadmin history read: {exc}")
+        return False
+
+
+def mark_teacher_notification_read(db, teacher_email, notification_id):
+    """Mark teacher notification read and propagate status to superadmin history."""
+    teacher = db.admin.find_one({"email": teacher_email})
+    if not teacher:
+        return False, "Teacher not found"
+
+    notifications = teacher.get("notifications", []) or []
+    found = False
+    for notif in notifications:
+        if notif.get("id") == notification_id and notif.get("source") == "superadmin":
+            notif["isRead"] = True
+            notif["readAt"] = datetime.now().isoformat()
+            found = True
+            break
+
+    if not found:
+        return False, "Notification not found"
+
+    db.admin.update_one(
+        {"_id": teacher["_id"]},
+        {"$set": {"notifications": notifications}}
+    )
+    mark_superadmin_history_read(db, teacher_email, notification_id)
+    return True, "Notification marked as read"
+
+
+def add_notification_to_teacher(admin_collection, teacher_doc, title, message, course):
+    """Add incoming notification to a teacher account and send email alert."""
+    try:
+        if admin_collection is None:
+            return False, "MongoDB admin collection not available"
+        if not teacher_doc:
+            return False, "Teacher not found"
+
+        notification = {
+            'id': str(ObjectId()),
+            'title': title,
+            'message': message,
+            'course': course,
+            'date': datetime.now().isoformat(),
+            'timestamp': datetime.now(),
+            'isRead': False,
+            'source': 'superadmin'
+        }
+
+        notifications = teacher_doc.get('notifications', []) or []
+        notifications.append(notification)
+        if len(notifications) > TEACHER_NOTIFICATION_LIMIT:
+            notifications.sort(key=lambda x: x.get('timestamp', datetime.min))
+            notifications = notifications[-TEACHER_NOTIFICATION_LIMIT:]
+
+        result = admin_collection.update_one(
+            {"_id": teacher_doc["_id"]},
+            {'$set': {'notifications': notifications}}
+        )
+
+        if result.modified_count > 0 or result.matched_count > 0:
+            teacher_email = teacher_doc.get('email')
+            if teacher_email:
+                try:
+                    send_email(
+                        recipients=[teacher_email],
+                        subject="New Notification from Admin",
+                        message="",
+                        email_type="superadmin_teacher_notification"
+                    )
+                except Exception as email_error:
+                    print(f"⚠️ Failed to send email to teacher {teacher_email}: {email_error}")
+            return True, "Notification added to teacher account", notification['id']
+        return False, "Failed to update teacher account", None
+    except Exception as e:
+        print(f"❌ Error adding notification to teacher: {e}")
+        traceback.print_exc()
+        return False, str(e), None
 
 def get_socketio():
     """Get SocketIO instance from Flask app"""
@@ -1029,6 +1188,186 @@ def get_admin_notification_history():
         print(f"❌ Error getting admin notification history: {e}")
         traceback.print_exc()
         return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+
+@notifications_bp.route('/send-notification-teacher', methods=['POST'])
+@jwt_required()
+def send_notification_to_teacher():
+    """Super admin sends notification to course teacher."""
+    try:
+        db, error_response = _get_db_or_response()
+        if error_response:
+            return error_response
+
+        current_user = get_jwt_identity() or {}
+        if current_user.get('role') != 'superadmin':
+            return jsonify({'error': 'Only super admin can send teacher notifications'}), 403
+
+        data = request.get_json() or {}
+        title = (data.get('title') or '').strip()
+        message = (data.get('message') or '').strip()
+        course = (data.get('course') or '').strip()
+
+        if not title or not message or not course:
+            return jsonify({'error': 'title, message, and course are required'}), 400
+
+        teacher = db.admin.find_one({'course': course})
+        if not teacher:
+            return jsonify({'error': f'No teacher assigned for {course}'}), 404
+
+        success, reason, notification_id = add_notification_to_teacher(db.admin, teacher, title, message, course)
+        if not success:
+            return jsonify({'error': reason}), 500
+
+        superadmin_email = current_user.get('email')
+        if superadmin_email:
+            add_notification_to_superadmin_history(
+                db.superadmins,
+                superadmin_email,
+                {
+                    'notification_id': notification_id,
+                    'message': message,
+                    'recipient_type': 'single',
+                    'recipients': [teacher.get('email', '')],
+                    'course': course
+                }
+            )
+
+        return jsonify({
+            'success': True,
+            'message': 'Notification sent to teacher',
+            'teacher': {
+                'name': teacher.get('name', ''),
+                'email': teacher.get('email', ''),
+                'course': teacher.get('course', course)
+            },
+            'notification_id': notification_id
+        }), 200
+    except Exception as e:
+        print(f"❌ Error sending notification to teacher: {e}")
+        traceback.print_exc()
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+
+@notifications_bp.route('/get-superadmin-notification-history', methods=['GET'])
+@jwt_required()
+def get_superadmin_notification_history():
+    """Get outgoing notification history for logged-in super admin."""
+    try:
+        db, error_response = _get_db_or_response()
+        if error_response:
+            return error_response
+
+        current_user = get_jwt_identity() or {}
+        if current_user.get('role') != 'superadmin':
+            return jsonify({'error': 'Only super admin can view this history'}), 403
+
+        superadmin_email = current_user.get('email')
+        if not superadmin_email:
+            return jsonify({'error': 'Super admin email not found in token'}), 400
+
+        superadmin = db.superadmins.find_one({'email': superadmin_email})
+        if not superadmin:
+            return jsonify({'error': 'Super admin not found'}), 404
+
+        notification_history = superadmin.get('notification_history', []) or []
+        history_clean = []
+        for entry in notification_history:
+            history_clean.append({
+                'id': entry.get('date', str(datetime.now().timestamp())),
+                'notification_id': entry.get('notification_id', ''),
+                'message': entry.get('message', ''),
+                'recipientType': entry.get('recipient_type', 'single'),
+                'recipients': entry.get('recipients', []),
+                'course': entry.get('course', ''),
+                'readByTeacher': bool(entry.get('readByTeacher', False)),
+                'readAt': entry.get('readAt'),
+                'createdAt': entry.get('date', ''),
+            })
+
+        history_clean.sort(key=lambda x: x.get('createdAt', ''), reverse=True)
+        return jsonify({'success': True, 'history': history_clean, 'count': len(history_clean)}), 200
+    except Exception as e:
+        print(f"❌ Error getting super admin notification history: {e}")
+        traceback.print_exc()
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+
+@notifications_bp.route('/get-teacher-notifications', methods=['GET'])
+@jwt_required()
+def get_teacher_notifications():
+    """Teacher inbox for notifications received from super admin."""
+    try:
+        db, error_response = _get_db_or_response()
+        if error_response:
+            return error_response
+
+        current_user = get_jwt_identity() or {}
+        if current_user.get('role') != 'admin':
+            return jsonify({'error': 'Only teacher/admin can view notifications'}), 403
+
+        admin_email = current_user.get('email')
+        if not admin_email:
+            return jsonify({'error': 'Teacher email not found in token'}), 400
+
+        teacher = db.admin.find_one({'email': admin_email})
+        if not teacher:
+            return jsonify({'error': 'Teacher not found'}), 404
+
+        notifications = teacher.get('notifications', []) or []
+        notifications_clean = []
+        for notif in notifications:
+            if notif.get('source') != 'superadmin':
+                continue
+            clean_notif = dict(notif)
+            if 'timestamp' in clean_notif:
+                del clean_notif['timestamp']
+            notifications_clean.append(clean_notif)
+
+        notifications_clean.sort(key=lambda x: x.get('date', ''), reverse=True)
+        return jsonify({
+            'success': True,
+            'notifications': notifications_clean,
+            'count': len(notifications_clean),
+            'notification_limit': TEACHER_NOTIFICATION_LIMIT
+        }), 200
+    except Exception as e:
+        print(f"❌ Error getting teacher notifications: {e}")
+        traceback.print_exc()
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+
+@notifications_bp.route('/mark-teacher-notification-read', methods=['POST'])
+@jwt_required()
+def mark_teacher_notification_read_endpoint():
+    """Mark superadmin notification as read from teacher app."""
+    try:
+        db, error_response = _get_db_or_response()
+        if error_response:
+            return error_response
+
+        current_user = get_jwt_identity() or {}
+        if current_user.get('role') != 'admin':
+            return jsonify({'error': 'Only teacher/admin can mark notifications as read'}), 403
+
+        data = request.get_json() or {}
+        notification_id = (data.get('notification_id') or '').strip()
+        if not notification_id:
+            return jsonify({'error': 'notification_id is required'}), 400
+
+        admin_email = current_user.get('email')
+        if not admin_email:
+            return jsonify({'error': 'Teacher email not found in token'}), 400
+
+        success, message = mark_teacher_notification_read(db, admin_email, notification_id)
+        if not success:
+            return jsonify({'error': message}), 404
+        return jsonify({'success': True, 'message': message}), 200
+    except Exception as e:
+        print(f"❌ Error marking teacher notification as read: {e}")
+        traceback.print_exc()
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
 
 @notifications_bp.route('/health', methods=['GET'])
 def health_check():

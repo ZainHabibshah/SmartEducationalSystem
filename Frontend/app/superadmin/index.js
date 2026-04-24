@@ -85,8 +85,6 @@ const loadEducationalNews = async () => {
   }
 };
 
-  // Intentionally removed "Students" and "Leaderboard" quick-actions
-  // from the Super Admin dashboard per requirements.
   const belowNews = null;
 
   if (loading) {
@@ -105,8 +103,15 @@ const loadEducationalNews = async () => {
       belowNews={belowNews}
       onPressCard={(key) => {
         if (key === 'assignTeacher') router.push('/superadmin/assign-teacher');
+        if (key === 'computerScienceStudents') router.push('/superadmin/students?course=computerScience');
+        if (key === 'physicsStudents') router.push('/superadmin/students?course=physics');
+        if (key === 'chemistryStudents') router.push('/superadmin/students?course=chemistry');
       }}
-      gridItems={[]}
+      gridItems={[
+        { key: 'computerScienceStudents', icon: 'school', label: 'Computer Science Students' },
+        { key: 'physicsStudents', icon: 'flask', label: 'Physics Students' },
+        { key: 'chemistryStudents', icon: 'color-filter', label: 'Chemistry Students' },
+      ]}
       centerButton={{
         icon: 'people',
         label: 'Assign / Replace Teacher',
@@ -115,6 +120,7 @@ const loadEducationalNews = async () => {
       footerButton={null}
       bottomIcons={[
         { key: 'home', icon: 'home', onPress: () => router.push('/superadmin') },
+        { key: 'notification', icon: 'notifications', onPress: () => router.push('/superadmin/notification') },
         { key: 'settings', icon: 'settings', onPress: () => router.push('/superadmin/settings') },
       ]}
     />

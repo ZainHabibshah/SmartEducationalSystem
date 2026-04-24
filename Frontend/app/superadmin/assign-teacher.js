@@ -3,6 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import apiService from '../../services/apiService';
 
 const COLORS = {
@@ -20,13 +21,32 @@ const COURSE_OPTIONS = [
 
 export default function AssignTeacherScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [course, setCourse] = useState('computerScience');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [saving, setSaving] = useState(false);
+  const [loadingCurrent, setLoadingCurrent] = useState(false);
+  const [currentTeacher, setCurrentTeacher] = useState(null);
 
   const courseLabel = useMemo(() => COURSE_OPTIONS.find((c) => c.value === course)?.label || course, [course]);
+
+  const loadCurrentTeacher = async (targetCourse = course) => {
+    setLoadingCurrent(true);
+    try {
+      const res = await apiService.getCourseTeacher(targetCourse);
+      setCurrentTeacher(res?.teacher || null);
+    } catch {
+      setCurrentTeacher(null);
+    } finally {
+      setLoadingCurrent(false);
+    }
+  };
+
+  React.useEffect(() => {
+    loadCurrentTeacher(course);
+  }, [course]);
 
   const submit = async () => {
     if (!name.trim() || !email.trim() || !password) {
@@ -56,6 +76,7 @@ export default function AssignTeacherScreen() {
       setName('');
       setEmail('');
       setPassword('');
+      await loadCurrentTeacher(course);
     } catch (e) {
       const msg = e?.error || e?.message || e?.response?.data?.error || 'Failed to assign teacher.';
       Alert.alert('Error', msg);
@@ -64,9 +85,31 @@ export default function AssignTeacherScreen() {
     }
   };
 
+  const removeTeacher = async () => {
+    Alert.alert('Remove Teacher', `Remove teacher from ${courseLabel}?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: async () => {
+          setSaving(true);
+          try {
+            const res = await apiService.removeTeacher(course);
+            Alert.alert('Success', res?.message || 'Teacher removed successfully.');
+            await loadCurrentTeacher(course);
+          } catch (e) {
+            Alert.alert('Error', e?.error || e?.message || 'Failed to remove teacher.');
+          } finally {
+            setSaving(false);
+          }
+        },
+      },
+    ]);
+  };
+
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: Math.max(14, insets.top + 6) }]}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()} activeOpacity={0.8}>
           <Ionicons name="arrow-back" size={22} color={COLORS.buttonText} />
         </TouchableOpacity>
@@ -99,8 +142,25 @@ export default function AssignTeacherScreen() {
         <Text style={styles.label}>Teacher Password</Text>
         <TextInput style={styles.input} value={password} onChangeText={setPassword} placeholder="Min 6 characters" placeholderTextColor={COLORS.link} secureTextEntry editable={!saving} />
 
+        <View style={styles.currentBox}>
+          <Text style={styles.currentTitle}>Current Teacher ({courseLabel})</Text>
+          {loadingCurrent ? (
+            <ActivityIndicator size="small" color={COLORS.inputBg} />
+          ) : currentTeacher ? (
+            <>
+              <Text style={styles.currentText}>Name: {currentTeacher.name || 'N/A'}</Text>
+              <Text style={styles.currentText}>Email: {currentTeacher.email || 'N/A'}</Text>
+            </>
+          ) : (
+            <Text style={styles.currentText}>No teacher assigned yet.</Text>
+          )}
+        </View>
+
         <TouchableOpacity style={styles.button} onPress={submit} activeOpacity={0.9} disabled={saving}>
           {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Save</Text>}
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.removeButton} onPress={removeTeacher} activeOpacity={0.9} disabled={saving}>
+          <Text style={styles.buttonText}>Remove Teacher</Text>
         </TouchableOpacity>
       </ScrollView>
     </View>
@@ -112,7 +172,6 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: COLORS.inputBg,
     paddingHorizontal: 16,
-    paddingTop: 44,
     paddingBottom: 16,
     flexDirection: 'row',
     alignItems: 'center',
@@ -127,7 +186,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerTitle: { color: '#fff', fontFamily: 'Griffter', fontSize: 18 },
-  content: { padding: 16, paddingBottom: 30 },
+  content: { width: '100%', maxWidth: 520, alignSelf: 'center', padding: 16, paddingBottom: 30 },
   label: { fontFamily: 'Griffter', color: COLORS.inputBg, fontSize: 14, marginTop: 12, marginBottom: 6 },
   input: {
     backgroundColor: '#fff',
@@ -159,5 +218,31 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   buttonText: { color: '#fff', fontFamily: 'Griffter', fontSize: 16 },
+  removeButton: {
+    backgroundColor: '#C62828',
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  currentBox: {
+    marginTop: 14,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#D9E3F0',
+    backgroundColor: '#fff',
+  },
+  currentTitle: {
+    fontFamily: 'Griffter',
+    fontSize: 14,
+    color: COLORS.inputBg,
+    marginBottom: 6,
+  },
+  currentText: {
+    fontFamily: 'Outfit',
+    color: COLORS.link,
+    marginBottom: 4,
+  },
 });
 

@@ -51,9 +51,12 @@ app.register_blueprint(notifications_bp, url_prefix='/api/notifications')
 
 # Register news blueprint
 try:
-    from news.routes import news_bp
+    from news.routes import news_bp, refresh_daily_news_on_startup
     app.register_blueprint(news_bp, url_prefix='/api/news')
     print("✅ News blueprint registered")
+    # Startup cache check for dashboard news:
+    # if 24h elapsed (or cache invalid), refresh and save top 5 news.
+    refresh_daily_news_on_startup()
 except Exception as e:
     print(f"⚠️  News blueprint not available: {e}")
 

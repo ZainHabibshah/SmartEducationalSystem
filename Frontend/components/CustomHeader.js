@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React from 'react';
-import { Platform, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const COLORS = {
     bg: '#F5F5F5',
@@ -15,6 +16,7 @@ const COLORS = {
 
 export default function CustomHeader({ title, showBackButton = true }) {
     const router = useRouter();
+    const insets = useSafeAreaInsets();
 
     const handleBack = () => {
         if (router.canGoBack()) {
@@ -25,16 +27,16 @@ export default function CustomHeader({ title, showBackButton = true }) {
         }
     };
 
-    const TOP_PAD = Platform.select({ ios: 70, android: (StatusBar?.currentHeight || 24) + 20 });
+    const TOP_PAD = Math.max(14, insets.top + 6);
 
     return (
-        <View style={styles.headerContainer}>
+        <View style={[styles.headerContainer, { paddingTop: TOP_PAD, paddingBottom: 14 }]}>
             {showBackButton && (
-                <TouchableOpacity style={[styles.backButton, { top: TOP_PAD }]} onPress={handleBack} activeOpacity={0.8}>
+                <TouchableOpacity style={styles.backButton} onPress={handleBack} activeOpacity={0.8}>
                     <Ionicons name="arrow-back" size={22} color={COLORS.inputBg} />
                 </TouchableOpacity>
             )}
-            <View style={[styles.titleContainer, { paddingTop: TOP_PAD }]}>
+            <View style={styles.titleContainer}>
                 <Text
                     style={styles.title}
                     numberOfLines={1}
@@ -50,7 +52,7 @@ export default function CustomHeader({ title, showBackButton = true }) {
 
 const styles = StyleSheet.create({
     headerContainer: {
-        padding: 20,
+        paddingHorizontal: 16,
         backgroundColor: COLORS.bg,
         alignItems: 'center',
         justifyContent: 'center',
@@ -73,15 +75,17 @@ const styles = StyleSheet.create({
         shadowRadius: 2,
         elevation: 2,
         position: 'absolute',
-        left: 20,
+        left: 16,
+        top: 8,
     },
     backText: {
         display: 'none',
     },
     titleContainer: {
         width: '100%',
-        paddingLeft: 60, 
-        paddingRight: 60, 
+        maxWidth: 520,
+        paddingLeft: 60,
+        paddingRight: 60,
     },
     title: {
         fontFamily: 'Griffter',

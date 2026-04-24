@@ -12,25 +12,19 @@ import {
     View,
     ActivityIndicator
 } from 'react-native';
-import OTPModal from '../../components/OTPModal';
 import UploadConfirmationModal from '../../components/UploadConfirmationModal';
 import { COLORS } from '../../constants/colors';
 import apiService from '../../services/apiService';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width, height } = Dimensions.get('window');
 
 export default function StudentsListScreen() {
     const router = useRouter();
-    const [basePath, setBasePath] = useState('/admin');
     const [students, setStudents] = useState([]);
     const [filteredStudents, setFilteredStudents] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [expandedStudent, setExpandedStudent] = useState(null);
-    const [showOTPModal, setShowOTPModal] = useState(false);
-    const [otpModalType, setOtpModalType] = useState('delete'); // currently used for delete only
-    const [studentToDelete, setStudentToDelete] = useState(null);
     const [confirmVisible, setConfirmVisible] = useState(false);
     const [confirmVariant, setConfirmVariant] = useState('success');
     const [confirmTitle, setConfirmTitle] = useState('');
@@ -40,14 +34,6 @@ export default function StudentsListScreen() {
     const fadeAnim = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
-        (async () => {
-            try {
-                setBasePath('/admin');
-            } catch {
-                setBasePath('/admin');
-            }
-        })();
-
         Animated.parallel([
             Animated.timing(slideAnim, {
                 toValue: 0,
@@ -126,87 +112,6 @@ export default function StudentsListScreen() {
 
     const handleExpandStudent = (studentId) => {
         setExpandedStudent(expandedStudent === studentId ? null : studentId);
-    };
-
-    const handleEditStudent = (student) => {
-        router.push({
-            pathname: `${basePath}/edit-student`,
-            params: { studentData: JSON.stringify(student) }
-        });
-    };
-
-    const handleDeleteStudent = async (student) => {
-        try {
-            setStudentToDelete(student);
-            setOtpModalType('delete');
-            
-            // Request OTP for delete operation
-            await apiService.requestOperationOtp('delete_student');
-            
-            // Show OTP modal after OTP is sent
-            setShowOTPModal(true);
-        } catch (error) {
-            console.error('Error requesting OTP:', error);
-            setConfirmVariant('error');
-            setConfirmTitle('Error');
-            setConfirmMessage(error?.error || error?.message || 'Failed to send OTP. Please try again.');
-            setConfirmVisible(true);
-        }
-    };
-
-    const handleAddStudent = () => {
-        // Directly navigate to add-student; OTP will be requested at the end of the add flow
-        router.push(`${basePath}/add-student`);
-    };
-
-    const requestAddStudentOtp = async () => {
-        try {
-            // Request OTP for delete operation (resend)
-            await apiService.requestOperationOtp('delete_student');
-            setConfirmVariant('success');
-            setConfirmTitle('OTP Sent');
-            setConfirmMessage('A new OTP has been sent to your admin email.');
-            setConfirmVisible(true);
-        } catch (error) {
-            console.error('Error resending OTP:', error);
-            setConfirmVariant('error');
-            setConfirmTitle('Error');
-            setConfirmMessage(error?.error || error?.message || 'Failed to resend OTP. Please try again.');
-            setConfirmVisible(true);
-        }
-    };
-
-    const handleOTPVerification = async (otp) => {
-        try {
-            if (otpModalType === 'delete' && studentToDelete) {
-                // Delete student with OTP verification
-                const result = await apiService.deleteStudent(studentToDelete.id, otp);
-                
-                if (result && result.message) {
-                    // Remove student from local state
-                    const updatedStudents = students.filter(s => s.id !== studentToDelete.id);
-                    setStudents(updatedStudents);
-                    setFilteredStudents(updatedStudents.filter(student => 
-                        student.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                        student.registrationNumber.toLowerCase().includes(searchQuery.toLowerCase())
-                    ));
-                    setStudentToDelete(null);
-                    setShowOTPModal(false);
-                    setConfirmVariant('success');
-                    setConfirmTitle('Deleted');
-                    setConfirmMessage(result.message || 'Student deleted successfully.');
-                    setConfirmVisible(true);
-                } else {
-                    throw new Error('Delete operation failed');
-                }
-            }
-        } catch (error) {
-            console.error('Error deleting student:', error);
-            setConfirmVariant('error');
-            setConfirmTitle('Error');
-            setConfirmMessage(error?.error || error?.message || 'Failed to delete student. Please check your OTP and try again.');
-            setConfirmVisible(true);
-        }
     };
 
     const StudentCard = ({ student, isExpanded }) => {
@@ -356,25 +261,6 @@ export default function StudentsListScreen() {
 
                     {/* Achievements grid removed as per requirements */}
                     
-                    <View style={styles.actionButtons}>
-                        <TouchableOpacity 
-                            style={[styles.actionButton, styles.editButton]}
-                            onPress={() => handleEditStudent(student)}
-                            activeOpacity={0.8}
-                        >
-                            <Ionicons name="create" size={20} color="#fff" />
-                            <Text style={styles.actionButtonText}>Edit Information</Text>
-                        </TouchableOpacity>
-                        
-                        <TouchableOpacity 
-                            style={[styles.actionButton, styles.deleteButton]}
-                            onPress={() => handleDeleteStudent(student)}
-                            activeOpacity={0.8}
-                        >
-                            <Ionicons name="trash" size={20} color="#fff" />
-                            <Text style={styles.actionButtonText}>Delete Student</Text>
-                        </TouchableOpacity>
-                    </View>
                 </Animated.View>
             )}
         </View>
@@ -402,14 +288,7 @@ export default function StudentsListScreen() {
                 </TouchableOpacity>
                 
                 <Text style={styles.headerTitle}>Students Management</Text>
-                
-                <TouchableOpacity 
-                    style={styles.addButton}
-                    onPress={handleAddStudent}
-                    activeOpacity={0.8}
-                >
-                    <Ionicons name="add" size={24} color={COLORS.buttonText} />
-                </TouchableOpacity>
+                <View style={styles.addButton} />
             </Animated.View>
 
             {/* Search Section */}
@@ -473,16 +352,6 @@ export default function StudentsListScreen() {
                 </ScrollView>
             )}
 
-            {/* OTP Modal */}
-            <OTPModal
-                visible={showOTPModal}
-                onClose={() => setShowOTPModal(false)}
-                onVerify={handleOTPVerification}
-                onResend={requestAddStudentOtp}
-                type={otpModalType}
-                studentName={studentToDelete?.fullName}
-            />
-
             {/* Confirmation Modal */}
             <UploadConfirmationModal
                 visible={confirmVisible}
@@ -490,7 +359,7 @@ export default function StudentsListScreen() {
                 title={confirmTitle}
                 message={confirmMessage}
                 variant={confirmVariant}
-                operationType={otpModalType === 'delete' ? 'delete' : 'otp'}
+                operationType="view"
             />
         </View>
     );
@@ -753,41 +622,6 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: COLORS.link,
         flex: 1,
-    },
-    actionButtons: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginTop: 20,
-        paddingTop: 20,
-        borderTopWidth: 1,
-        borderTopColor: '#E0E0E0',
-    },
-    actionButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 12,
-        paddingHorizontal: 20,
-        borderRadius: 15,
-        flex: 0.48,
-        justifyContent: 'center',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3,
-    },
-    editButton: {
-        backgroundColor: '#4CAF50',
-    },
-    deleteButton: {
-        backgroundColor: '#F44336',
-    },
-    actionButtonText: {
-        fontFamily: 'Outfit',
-        fontSize: 14,
-        color: '#fff',
-        marginLeft: 8,
-        fontWeight: '600',
     },
     noResultsContainer: {
         alignItems: 'center',

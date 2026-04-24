@@ -442,6 +442,52 @@ class ApiService {
     }
   }
 
+  async sendNotificationToTeacher(course, title, message) {
+    try {
+      const result = await this.axiosInstance.post('/api/notifications/send-notification-teacher', {
+        course,
+        title,
+        message,
+      });
+      return result;
+    } catch (error) {
+      console.error('Send notification to teacher error:', error);
+      throw error;
+    }
+  }
+
+  async getSuperadminNotificationHistory() {
+    try {
+      const result = await this.axiosInstance.get('/api/notifications/get-superadmin-notification-history');
+      return result;
+    } catch (error) {
+      console.error('Get superadmin notification history error:', error);
+      throw error;
+    }
+  }
+
+  async getTeacherNotifications() {
+    try {
+      const result = await this.axiosInstance.get('/api/notifications/get-teacher-notifications');
+      return result;
+    } catch (error) {
+      console.error('Get teacher notifications error:', error);
+      throw error;
+    }
+  }
+
+  async markTeacherNotificationRead(notificationId) {
+    try {
+      const result = await this.axiosInstance.post('/api/notifications/mark-teacher-notification-read', {
+        notification_id: notificationId,
+      });
+      return result;
+    } catch (error) {
+      console.error('Mark teacher notification read error:', error);
+      throw error;
+    }
+  }
+
   async getEducationalNews() {
     try {
       const result = await this.axiosInstance.get('/api/news/educational-news');
@@ -1067,6 +1113,39 @@ class ApiService {
   async getSuperadminAllStudents() {
     return await this.axiosInstance.get('/auth/superadmin/all-students', {
       timeout: 30000,
+    });
+  }
+
+  async getSuperadminStudentsByCourse(course) {
+    return await this.axiosInstance.get('/auth/superadmin/students', {
+      params: { course },
+      timeout: 30000,
+    });
+  }
+
+  async registerStudentBySuperadmin(payload) {
+    return await this.axiosInstance.post('/auth/superadmin/register-student', payload);
+  }
+
+  async updateStudentBySuperadmin(studentId, payload) {
+    return await this.axiosInstance.put(`/auth/superadmin/update-student/${studentId}`, payload);
+  }
+
+  async deleteStudentBySuperadmin(studentId, course) {
+    return await this.axiosInstance.delete(`/auth/superadmin/delete-student/${studentId}`, {
+      data: { course },
+    });
+  }
+
+  async getCourseTeacher(course) {
+    return await this.axiosInstance.get('/auth/superadmin/course-teacher', {
+      params: { course },
+    });
+  }
+
+  async removeTeacher(course) {
+    return await this.axiosInstance.delete('/auth/superadmin/remove-teacher', {
+      data: { course },
     });
   }
 
