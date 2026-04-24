@@ -1482,6 +1482,136 @@ def mark_teacher_notification_read_endpoint():
         return jsonify({'error': f'Server error: {str(e)}'}), 500
 
 
+@notifications_bp.route('/superadmin/course-teacher', methods=['GET'])
+@jwt_required()
+def get_course_teacher():
+    """Return current teacher details for a given course from admin collection."""
+    try:
+        db, error_response = _get_db_or_response()
+        if error_response:
+            return error_response
+
+        current_user = get_jwt_identity() or {}
+        if current_user.get('role') != 'superadmin':
+            return jsonify({'error': 'Only super admin can view course teacher'}), 403
+
+        course = (request.args.get('course') or '').strip()
+        if not course:
+            return jsonify({'error': 'course is required'}), 400
+
+        teacher = db.admin.find_one({'course': course})
+        if not teacher:
+            return jsonify({'success': True, 'course': course, 'teacher': None}), 200
+
+        # If teacher was "removed", fields may be empty/null. Treat it as no active teacher.
+        has_active_teacher = bool((teacher.get('name') or '').strip()) and bool((teacher.get('email') or '').strip())
+        teacher_payload = None
+        if has_active_teacher:
+            teacher_payload = {
+                'id': str(teacher.get('_id', '')),
+                'name': teacher.get('name', ''),
+                'email': teacher.get('email', ''),
+                'course': teacher.get('course', course),
+                'role': teacher.get('role', 'admin')
+            }
+
+        return jsonify({'success': True, 'course': course, 'teacher': teacher_payload}), 200
+    except Exception as e:
+        print(f"❌ Error getting course teacher: {e}")
+        traceback.print_exc()
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+
+@notifications_bp.route('/superadmin/assign-teacher', methods=['POST'])
+@jwt_required()
+def assign_teacher_for_course():
+    """Assign or replace teacher for a specific course in admin collection."""
+    try:
+        db, error_response = _get_db_or_response()
+        if error_response:
+            return error_response
+
+        current_user = get_jwt_identity() or {}
+        if current_user.get('role') != 'superadmin':
+            return jsonify({'error': 'Only super admin can assign teacher'}), 403
+
+        data = request.get_json() or {}
+        course = (data.get('course') or '').strip()
+        name = (data.get('name') or '').strip()
+        email = (data.get('email') or '').strip().lower()
+        password = data.get('password')
+
+        if not course or not name or not email or not password:
+            return jsonify({'error': 'course, name, email, and password are required'}), 400
+
+        if course not in COURSE_COLLECTIONS:
+            return jsonify({'error': f'Unknown course: {course}'}), 400
+
+        existing = db.admin.find_one({'course': course})
+        payload = {
+            'name': name,
+            'email': email,
+            'password': password,
+            'course': course,
+            'role': 'admin'
+        }
+
+        if existing:
+            db.admin.update_one({'_id': existing['_id']}, {'$set': payload})
+            return jsonify({
+                'success': True,
+                'created': False,
+                'message': f'Teacher replaced for {course}',
+                'teacher': {'name': name, 'email': email, 'course': course}
+            }), 200
+
+        db.admin.insert_one(payload)
+        return jsonify({
+            'success': True,
+            'created': True,
+            'message': f'Teacher assigned for {course}',
+            'teacher': {'name': name, 'email': email, 'course': course}
+        }), 201
+    except Exception as e:
+        print(f"❌ Error assigning teacher: {e}")
+        traceback.print_exc()
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+
+@notifications_bp.route('/superadmin/remove-teacher', methods=['DELETE'])
+@jwt_required()
+def remove_teacher_for_course():
+    """Remove active teacher credentials for a specific course (set fields to null)."""
+    try:
+        db, error_response = _get_db_or_response()
+        if error_response:
+            return error_response
+
+        current_user = get_jwt_identity() or {}
+        if current_user.get('role') != 'superadmin':
+            return jsonify({'error': 'Only super admin can remove teacher'}), 403
+
+        data = request.get_json() or {}
+        course = (data.get('course') or '').strip()
+        if not course:
+            return jsonify({'error': 'course is required'}), 400
+
+        teacher = db.admin.find_one({'course': course})
+        if not teacher:
+            return jsonify({'error': f'No teacher document found for {course}'}), 404
+
+        db.admin.update_one(
+            {'_id': teacher['_id']},
+            {'$set': {'name': None, 'email': None, 'password': None, 'role': 'admin', 'course': course}}
+        )
+
+        return jsonify({'success': True, 'message': f'Teacher removed for {course}'}), 200
+    except Exception as e:
+        print(f"❌ Error removing teacher: {e}")
+        traceback.print_exc()
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+
 @notifications_bp.route('/health', methods=['GET'])
 def health_check():
     """

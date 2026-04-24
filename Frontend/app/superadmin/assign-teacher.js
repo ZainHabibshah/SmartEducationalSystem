@@ -88,8 +88,7 @@ export default function AssignTeacherScreen() {
 
     setSaving(true);
     try {
-      // Call backend endpoint directly via existing axios instance
-      const res = await apiService.axiosInstance.post('/auth/superadmin/assign-teacher', {
+      const res = await apiService.assignTeacherBySuperadmin({
         course,
         name: name.trim(),
         email: email.trim(),

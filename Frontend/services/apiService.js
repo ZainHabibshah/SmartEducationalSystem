@@ -1159,15 +1159,47 @@ class ApiService {
   }
 
   async getCourseTeacher(course) {
-    return await this.axiosInstance.get('/auth/superadmin/course-teacher', {
-      params: { course },
-    });
+    try {
+      return await this.axiosInstance.get('/auth/superadmin/course-teacher', {
+        params: { course },
+      });
+    } catch (error) {
+      const status = error?.status;
+      if (status === 404 || status === 405) {
+        return await this.axiosInstance.get('/api/notifications/superadmin/course-teacher', {
+          params: { course },
+        });
+      }
+      throw error;
+    }
+  }
+
+  async assignTeacherBySuperadmin(payload) {
+    try {
+      return await this.axiosInstance.post('/auth/superadmin/assign-teacher', payload);
+    } catch (error) {
+      const status = error?.status;
+      if (status === 404 || status === 405) {
+        return await this.axiosInstance.post('/api/notifications/superadmin/assign-teacher', payload);
+      }
+      throw error;
+    }
   }
 
   async removeTeacher(course) {
-    return await this.axiosInstance.delete('/auth/superadmin/remove-teacher', {
-      data: { course },
-    });
+    try {
+      return await this.axiosInstance.delete('/auth/superadmin/remove-teacher', {
+        data: { course },
+      });
+    } catch (error) {
+      const status = error?.status;
+      if (status === 404 || status === 405) {
+        return await this.axiosInstance.delete('/api/notifications/superadmin/remove-teacher', {
+          data: { course },
+        });
+      }
+      throw error;
+    }
   }
 
   async getSuperadminGlobalLeaderboard() {
