@@ -1,8 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Animated,
+  Dimensions,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { COLORS } from '../../constants/colors';
 import apiService from '../../services/apiService';
 
@@ -12,34 +22,67 @@ const COURSE_LABELS = {
   chemistry: 'Chemistry',
 };
 
+const { width, height } = Dimensions.get('window');
+
 export default function SuperadminStudentsScreen() {
-  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { course = 'computerScience' } = useLocalSearchParams();
   const [students, setStudents] = useState([]);
-  const [query, setQuery] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [expandedId, setExpandedId] = useState(null);
+  const [filteredStudents, setFilteredStudents] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [expandedStudent, setExpandedStudent] = useState(null);
 
   const courseKey = String(course);
-  const title = useMemo(() => `${COURSE_LABELS[courseKey] || courseKey} Students`, [courseKey]);
+
+  const slideAnim = useRef(new Animated.Value(-100)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 1000,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [fadeAnim, slideAnim]);
 
   const loadStudents = useCallback(async () => {
     try {
-      setLoading(true);
+      setIsLoading(true);
       let res = null;
       try {
         // Prefer dedicated superadmin endpoint when available.
         res = await apiService.getSuperadminStudentsByCourse(courseKey);
-      } catch (primaryError) {
+      } catch {
         // Fallback to shared students endpoint to avoid blocking the three course buttons.
         res = await apiService.getAllStudents(courseKey);
       }
-      setStudents(res?.students || []);
+      const formattedStudents = (res?.students || []).map((student) => ({
+        ...student,
+        fullName: student.fullName || student.name || 'N/A',
+        fatherName: student.fatherName || 'N/A',
+        address: student.address || 'N/A',
+        pastSchool: student.pastSchool || 'N/A',
+        phoneNumber: student.phoneNumber || student.phone || 'N/A',
+        email: student.email || 'N/A',
+        registrationNumber: student.registrationNumber || student.student_id || 'N/A',
+        quizHistory: student.quizHistory || [],
+      }));
+      setStudents(formattedStudents);
+      setFilteredStudents(formattedStudents);
     } catch (error) {
       Alert.alert('Error', error?.error || error?.message || 'Failed to load students');
+      setStudents([]);
+      setFilteredStudents([]);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   }, [courseKey]);
 
@@ -49,14 +92,23 @@ export default function SuperadminStudentsScreen() {
     }, [loadStudents])
   );
 
-  const filtered = students.filter((s) => {
-    const q = query.trim().toLowerCase();
-    if (!q) return true;
-    return (
-      (s.fullName || '').toLowerCase().includes(q) ||
-      (s.registrationNumber || '').toLowerCase().includes(q)
-    );
-  });
+  const handleSearch = (query) => {
+    setSearchQuery(query);
+    if (query.trim() === '') {
+      setFilteredStudents(students);
+      return;
+    }
+    const q = query.toLowerCase();
+    const filtered = students.filter((student) => (
+      (student.fullName || '').toLowerCase().includes(q) ||
+      (student.registrationNumber || '').toLowerCase().includes(q)
+    ));
+    setFilteredStudents(filtered);
+  };
+
+  const handleExpandStudent = (studentId) => {
+    setExpandedStudent(expandedStudent === studentId ? null : studentId);
+  };
 
   const onDelete = (student) => {
     Alert.alert('Delete Student', `Delete ${student.fullName}?`, [
@@ -66,7 +118,14 @@ export default function SuperadminStudentsScreen() {
         style: 'destructive',
         onPress: async () => {
           try {
-            await apiService.deleteStudentBySuperadmin(student.id, courseKey);
+            try {
+              await apiService.deleteStudentBySuperadmin(student.id, courseKey);
+            } catch {
+              // Fallback to existing notifications service delete route.
+              await apiService.axiosInstance.delete('/api/notifications/delete-student', {
+                params: { student_id: student.id, course: courseKey },
+              });
+            }
             await loadStudents();
           } catch (error) {
             Alert.alert('Error', error?.error || error?.message || 'Delete failed');
@@ -76,92 +135,371 @@ export default function SuperadminStudentsScreen() {
     ]);
   };
 
+  const StudentCard = ({ student, isExpanded }) => (
+    <View style={styles.studentCard}>
+      <View style={styles.studentCardHeader}>
+        <View style={styles.studentInfo}>
+          <Text style={styles.studentName}>{student.fullName || 'N/A'}</Text>
+          <Text style={styles.fatherName}>{student.fatherName || 'N/A'}</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.expandButton}
+          onPress={() => handleExpandStudent(student.id)}
+          activeOpacity={0.8}
+        >
+          <Ionicons
+            name={isExpanded ? 'chevron-up' : 'chevron-down'}
+            size={24}
+            color={COLORS.inputBg}
+          />
+        </TouchableOpacity>
+      </View>
+
+      {isExpanded && (
+        <Animated.View style={styles.expandedContent}>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Address:</Text>
+            <Text style={styles.detailValue}>{student.address || 'N/A'}</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Past School:</Text>
+            <Text style={styles.detailValue}>{student.pastSchool || 'N/A'}</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Phone:</Text>
+            <Text style={styles.detailValue}>{student.phoneNumber || 'N/A'}</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Email:</Text>
+            <Text style={styles.detailValue}>{student.email || 'N/A'}</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Registration No:</Text>
+            <Text style={styles.detailValue}>{student.registrationNumber || 'N/A'}</Text>
+          </View>
+
+          <View style={styles.actionsRow}>
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.editBtn]}
+              onPress={() => router.push({ pathname: '/superadmin/edit-student', params: { course: courseKey, studentData: JSON.stringify(student) } })}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.actionText}>Edit</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.deleteBtn]}
+              onPress={() => onDelete(student)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.actionText}>Delete</Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      )}
+    </View>
+  );
+
   return (
     <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: Math.max(14, insets.top + 6) }]}>
-        <TouchableOpacity style={styles.iconBtn} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={20} color="#fff" />
+      <Animated.View
+        style={[
+          styles.header,
+          {
+            transform: [{ translateY: slideAnim }],
+            opacity: fadeAnim,
+          },
+        ]}
+      >
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="arrow-back" size={24} color={COLORS.buttonText} />
         </TouchableOpacity>
-        <Text style={styles.title}>{title}</Text>
-        <TouchableOpacity style={styles.iconBtn} onPress={() => router.push(`/superadmin/add-student?course=${courseKey}`)}>
-          <Ionicons name="add" size={20} color="#fff" />
+        <Text style={styles.headerTitle}>{`${COURSE_LABELS[courseKey] || courseKey} Students`}</Text>
+        <TouchableOpacity
+          style={styles.addButton}
+          onPress={() => router.push(`/superadmin/add-student?course=${courseKey}`)}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="add" size={24} color={COLORS.buttonText} />
         </TouchableOpacity>
-      </View>
+      </Animated.View>
 
-      <View style={styles.contentWrap}>
-      <View style={styles.searchWrap}>
-        <TextInput
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Search by name or registration number"
-          placeholderTextColor={COLORS.link}
-          style={styles.search}
-        />
-      </View>
+      <Animated.View
+        style={[
+          styles.searchSection,
+          {
+            opacity: fadeAnim,
+          },
+        ]}
+      >
+        <View style={styles.searchContainer}>
+          <Ionicons name="search" size={20} color={COLORS.link} style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search by name or registration number..."
+            placeholderTextColor={COLORS.link}
+            value={searchQuery}
+            onChangeText={handleSearch}
+          />
+        </View>
 
-      {loading ? (
-        <View style={styles.centered}>
-          <ActivityIndicator color={COLORS.inputBg} />
+        <TouchableOpacity
+          style={styles.searchButton}
+          onPress={() => handleSearch(searchQuery)}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.searchButtonText}>Search</Text>
+        </TouchableOpacity>
+      </Animated.View>
+
+      {isLoading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={COLORS.inputBg} />
+          <Text style={styles.loadingText}>Loading students...</Text>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={{ paddingBottom: 24 }}>
-          {filtered.map((student) => {
-            const expanded = expandedId === student.id;
-            return (
-              <View key={student.id} style={styles.card}>
-                <TouchableOpacity style={styles.cardRow} onPress={() => setExpandedId(expanded ? null : student.id)}>
-                  <View>
-                    <Text style={styles.name}>{student.fullName}</Text>
-                    <Text style={styles.sub}>{student.registrationNumber}</Text>
-                  </View>
-                  <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={20} color={COLORS.inputBg} />
-                </TouchableOpacity>
-                {expanded && (
-                  <View style={styles.details}>
-                    <Text style={styles.detailText}>Father: {student.fatherName || 'N/A'}</Text>
-                    <Text style={styles.detailText}>Email: {student.email || 'N/A'}</Text>
-                    <Text style={styles.detailText}>Phone: {student.phoneNumber || 'N/A'}</Text>
-                    <Text style={styles.detailText}>Address: {student.address || 'N/A'}</Text>
-                    <View style={styles.actions}>
-                      <TouchableOpacity style={[styles.actionBtn, styles.edit]} onPress={() => router.push({ pathname: '/superadmin/edit-student', params: { course: courseKey, studentData: JSON.stringify(student) } })}>
-                        <Text style={styles.actionText}>Edit</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={[styles.actionBtn, styles.delete]} onPress={() => onDelete(student)}>
-                        <Text style={styles.actionText}>Delete</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                )}
-              </View>
-            );
-          })}
-          {!filtered.length && <Text style={styles.empty}>No students found.</Text>}
+        <ScrollView
+          style={styles.studentsList}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.studentsListContent}
+        >
+          {filteredStudents.map((student) => (
+            <StudentCard
+              key={student.id}
+              student={student}
+              isExpanded={expandedStudent === student.id}
+            />
+          ))}
+
+          {filteredStudents.length === 0 && (
+            <View style={styles.noResultsContainer}>
+              <Ionicons name="people-outline" size={64} color={COLORS.link} />
+              <Text style={styles.noResultsText}>No students found</Text>
+              <Text style={styles.noResultsSubtext}>
+                {searchQuery
+                  ? 'Try adjusting your search criteria'
+                  : 'No students registered yet. Tap + to add a student.'}
+              </Text>
+            </View>
+          )}
         </ScrollView>
       )}
-      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
-  header: { backgroundColor: COLORS.inputBg, paddingTop: 44, paddingHorizontal: 16, paddingBottom: 14, flexDirection: 'row', alignItems: 'center' },
-  contentWrap: { flex: 1, width: '100%', maxWidth: 520, alignSelf: 'center' },
-  iconBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
-  title: { flex: 1, textAlign: 'center', color: '#fff', fontFamily: 'Griffter', fontSize: 18 },
-  searchWrap: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
-  search: { backgroundColor: '#fff', borderRadius: 12, borderColor: COLORS.inputBg, borderWidth: 2, paddingHorizontal: 12, paddingVertical: 10, color: COLORS.inputBg, fontFamily: 'Outfit' },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  card: { backgroundColor: '#fff', borderWidth: 2, borderColor: COLORS.inputBg, borderRadius: 14, padding: 12, marginBottom: 12 },
-  cardRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  name: { fontFamily: 'Griffter', color: COLORS.inputBg, fontSize: 16 },
-  sub: { fontFamily: 'Outfit', color: COLORS.link, marginTop: 4 },
-  details: { marginTop: 10, borderTopWidth: 1, borderTopColor: '#e8e8e8', paddingTop: 10, gap: 6 },
-  detailText: { fontFamily: 'Outfit', color: COLORS.link },
-  actions: { flexDirection: 'row', gap: 10, marginTop: 8 },
-  actionBtn: { flex: 1, borderRadius: 10, paddingVertical: 10, alignItems: 'center' },
-  edit: { backgroundColor: '#4CAF50' },
-  delete: { backgroundColor: '#F44336' },
-  actionText: { color: '#fff', fontFamily: 'Outfit', fontWeight: '700' },
-  empty: { textAlign: 'center', color: COLORS.link, fontFamily: 'Outfit', marginTop: 24 },
+  header: {
+    backgroundColor: COLORS.inputBg,
+    paddingHorizontal: 20,
+    paddingTop: Math.max(20, height * 0.03),
+    paddingBottom: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderBottomLeftRadius: 25,
+    borderBottomRightRadius: 25,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: {
+    fontFamily: 'Griffter',
+    fontSize: width > 400 ? 22 : 18,
+    color: COLORS.buttonText,
+    flex: 1,
+    textAlign: 'center',
+    marginHorizontal: 12,
+  },
+  addButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchSection: {
+    padding: 20,
+    backgroundColor: 'transparent',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 15,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    marginBottom: 15,
+    borderWidth: 2,
+    borderColor: COLORS.inputBg,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  searchIcon: {
+    marginRight: 10,
+  },
+  searchInput: {
+    flex: 1,
+    fontFamily: 'Outfit',
+    fontSize: 16,
+    color: COLORS.inputBg,
+  },
+  searchButton: {
+    backgroundColor: COLORS.inputBg,
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  searchButtonText: {
+    fontFamily: 'Griffter',
+    fontSize: 16,
+    color: COLORS.buttonText,
+  },
+  studentsList: {
+    flex: 1,
+    paddingHorizontal: 20,
+  },
+  studentsListContent: {
+    paddingBottom: 20,
+  },
+  studentCard: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 15,
+    borderWidth: 2,
+    borderColor: COLORS.inputBg,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  studentCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  studentInfo: {
+    flex: 1,
+  },
+  studentName: {
+    fontFamily: 'Griffter',
+    fontSize: 18,
+    color: COLORS.inputBg,
+    marginBottom: 4,
+  },
+  fatherName: {
+    fontFamily: 'Outfit',
+    fontSize: 14,
+    color: COLORS.link,
+  },
+  expandButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F0F8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  expandedContent: {
+    marginTop: 20,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+  },
+  detailRow: {
+    flexDirection: 'row',
+    marginBottom: 12,
+    alignItems: 'flex-start',
+  },
+  detailLabel: {
+    fontFamily: 'Griffter',
+    fontSize: 14,
+    color: COLORS.inputBg,
+    width: 120,
+    marginRight: 10,
+  },
+  detailValue: {
+    fontFamily: 'Outfit',
+    fontSize: 14,
+    color: COLORS.link,
+    flex: 1,
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    marginTop: 8,
+    gap: 10,
+  },
+  actionBtn: {
+    flex: 1,
+    borderRadius: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  editBtn: {
+    backgroundColor: '#4CAF50',
+  },
+  deleteBtn: {
+    backgroundColor: '#F44336',
+  },
+  actionText: {
+    color: '#fff',
+    fontFamily: 'Outfit',
+    fontWeight: '700',
+  },
+  noResultsContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  noResultsText: {
+    fontFamily: 'Griffter',
+    fontSize: 20,
+    color: COLORS.inputBg,
+    marginTop: 20,
+    marginBottom: 8,
+  },
+  noResultsSubtext: {
+    fontFamily: 'Outfit',
+    fontSize: 16,
+    color: COLORS.link,
+    textAlign: 'center',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  loadingText: {
+    fontFamily: 'Outfit',
+    fontSize: 16,
+    color: COLORS.link,
+    marginTop: 16,
+  },
 });
