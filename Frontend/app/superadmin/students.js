@@ -27,7 +27,14 @@ export default function SuperadminStudentsScreen() {
   const loadStudents = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await apiService.getSuperadminStudentsByCourse(courseKey);
+      let res = null;
+      try {
+        // Prefer dedicated superadmin endpoint when available.
+        res = await apiService.getSuperadminStudentsByCourse(courseKey);
+      } catch (primaryError) {
+        // Fallback to shared students endpoint to avoid blocking the three course buttons.
+        res = await apiService.getAllStudents(courseKey);
+      }
       setStudents(res?.students || []);
     } catch (error) {
       Alert.alert('Error', error?.error || error?.message || 'Failed to load students');
