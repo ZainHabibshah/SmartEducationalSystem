@@ -993,14 +993,59 @@ def get_all_students():
             
             # Use custom ID if available, otherwise use _id
             display_id = custom_id if custom_id else student_id_value
+
+            # Include both camelCase and snake_case variants so different clients
+            # (teacher and superadmin screens) can render the same student data.
+            full_name = (
+                student.get('fullName')
+                or student.get('full_name')
+                or student.get('name')
+                or 'Unknown'
+            )
+            father_name = student.get('fatherName') or student.get('father_name') or ''
+            phone_number = (
+                student.get('phoneNumber')
+                or student.get('phone_number')
+                or student.get('phone')
+                or ''
+            )
+            past_school = student.get('pastSchool') or student.get('past_school') or ''
+            registration_number = (
+                student.get('registrationNumber')
+                or student.get('registration_number')
+                or student.get('rollNumber')
+                or student.get('roll_number')
+                or student.get('student_id')
+                or ''
+            )
+            quiz_history = student.get('quizHistory') or student.get('quiz_history') or []
             
             formatted_students.append({
+                # Existing fields
                 'student_id': display_id,
                 'mongo_id': student_id_value,  # Always include MongoDB _id for reference
-                'name': student.get('name', 'Unknown'),
+                'name': student.get('name', full_name),
                 'email': student.get('email', ''),
                 'notification_count': len(notifications),
-                'notification_limit': NOTIFICATION_LIMIT
+                'notification_limit': NOTIFICATION_LIMIT,
+                # Detailed student profile fields
+                'id': display_id,
+                'fullName': full_name,
+                'full_name': full_name,
+                'fatherName': father_name,
+                'father_name': father_name,
+                'address': student.get('address', ''),
+                'pastSchool': past_school,
+                'past_school': past_school,
+                'phoneNumber': phone_number,
+                'phone_number': phone_number,
+                'phone': phone_number,
+                'registrationNumber': registration_number,
+                'registration_number': registration_number,
+                'rollNumber': registration_number,
+                'roll_number': registration_number,
+                'quizHistory': quiz_history,
+                'quiz_history': quiz_history,
             })
         
         return jsonify({
