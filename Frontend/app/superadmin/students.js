@@ -64,17 +64,66 @@ export default function SuperadminStudentsScreen() {
         // Fallback to shared students endpoint to avoid blocking the three course buttons.
         res = await apiService.getAllStudents(courseKey);
       }
-      const formattedStudents = (res?.students || []).map((student) => ({
-        ...student,
-        fullName: student.fullName || student.name || 'N/A',
-        fatherName: student.fatherName || 'N/A',
-        address: student.address || 'N/A',
-        pastSchool: student.pastSchool || 'N/A',
-        phoneNumber: student.phoneNumber || student.phone || 'N/A',
-        email: student.email || 'N/A',
-        registrationNumber: student.registrationNumber || student.student_id || 'N/A',
-        quizHistory: student.quizHistory || [],
-      }));
+      const normalizedValue = (value) => {
+        if (value === undefined || value === null) return '';
+        const str = String(value).trim();
+        return str;
+      };
+
+      const pickFirstNonEmpty = (...values) => {
+        for (const value of values) {
+          const normalized = normalizedValue(value);
+          if (normalized.length > 0) return normalized;
+        }
+        return '';
+      };
+
+      const formattedStudents = (res?.students || []).map((student) => {
+        const fullName = pickFirstNonEmpty(student.fullName, student.full_name, student.name);
+        const fatherName = pickFirstNonEmpty(student.fatherName, student.father_name);
+        const address = pickFirstNonEmpty(student.address);
+        const pastSchool = pickFirstNonEmpty(student.pastSchool, student.past_school);
+        const phoneNumber = pickFirstNonEmpty(
+          student.phoneNumber,
+          student.phone_number,
+          student.phone
+        );
+        const email = pickFirstNonEmpty(student.email);
+        const registrationNumber = pickFirstNonEmpty(
+          student.registrationNumber,
+          student.registration_number,
+          student.rollNumber,
+          student.roll_number,
+          student.student_id
+        );
+        const quizHistory = student.quizHistory || student.quiz_history || [];
+        const id = pickFirstNonEmpty(
+          student.id,
+          student._id,
+          student.mongo_id,
+          student.student_id,
+          student.studentId
+        );
+
+        const stableFallbackId = pickFirstNonEmpty(
+          registrationNumber,
+          email,
+          fullName
+        );
+
+        return {
+          ...student,
+          id: id || stableFallbackId || 'unknown-student',
+          fullName: fullName || 'N/A',
+          fatherName: fatherName || 'N/A',
+          address: address || 'N/A',
+          pastSchool: pastSchool || 'N/A',
+          phoneNumber: phoneNumber || 'N/A',
+          email: email || 'N/A',
+          registrationNumber: registrationNumber || 'N/A',
+          quizHistory: Array.isArray(quizHistory) ? quizHistory : [],
+        };
+      });
       setStudents(formattedStudents);
       setFilteredStudents(formattedStudents);
     } catch (error) {
