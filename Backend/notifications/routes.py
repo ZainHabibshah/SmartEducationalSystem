@@ -1074,7 +1074,11 @@ def register_student():
         if error_response:
             return error_response
 
-        course = (request.args.get("course") or "").strip()
+        data = request.get_json() or {}
+
+        # Accept course from query first, then body for compatibility with
+        # different frontend implementations.
+        course = (request.args.get("course") or data.get("course") or "").strip()
         if not course:
             return jsonify({"error": "Course is required"}), 400
 
@@ -1083,10 +1087,10 @@ def register_student():
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
 
-        data = request.get_json()
-        
         # Validate required fields
-        if not data or 'name' not in data:
+        name = (data.get('name') or data.get('full_name') or data.get('fullName') or '').strip()
+        email = (data.get('email') or '').strip().lower()
+        if not name:
             return jsonify({
                 'error': 'Name is required',
                 'example': {
@@ -1094,9 +1098,13 @@ def register_student():
                     'email': 'john@example.com'
                 }
             }), 400
-        
-        name = data['name']
-        email = data.get('email', '')
+
+        # Extra profile fields for superadmin add-student flow
+        father_name = (data.get('father_name') or data.get('fatherName') or '').strip()
+        address = (data.get('address') or '').strip()
+        past_school = (data.get('past_school') or data.get('pastSchool') or '').strip()
+        phone = (data.get('phone') or data.get('phone_number') or data.get('phoneNumber') or '').strip()
+        password = data.get('password', '')
         
         # Check if student with same email already exists
         if email:
@@ -1107,23 +1115,83 @@ def register_student():
                     'student_id': str(existing['_id'])
                 }), 400
         
-        # Create new student document
+        # Build a readable registration number using course prefix + sequence.
+        prefix_map = {
+            "computerScience": "CS",
+            "chemistry": "CH",
+            "physics": "PH",
+        }
+        reg_prefix = prefix_map.get(course, "ST")
+        seq = students_collection.count_documents({}) + 1
+        registration_number = f"{reg_prefix}{seq:04d}"
+
+        # Create new student document (store both snake_case and camelCase where
+        # useful to keep compatibility with existing frontend screens).
         student_doc = {
             'name': name,
+            'full_name': name,
+            'fullName': name,
+            'father_name': father_name,
+            'fatherName': father_name,
+            'address': address,
+            'past_school': past_school,
+            'pastSchool': past_school,
+            'phone': phone,
+            'phone_number': phone,
+            'phoneNumber': phone,
             'email': email,
+            'password': password,
+            'registration_number': registration_number,
+            'registrationNumber': registration_number,
             'notifications': [],
+            'course': course,
             'created_at': datetime.now().isoformat()
         }
         
         result = students_collection.insert_one(student_doc)
+
+        # Send welcome email with credentials for newly added students.
+        email_sent = False
+        email_error = None
+        if email:
+            try:
+                welcome_subject = "Welcome to Educational Companion App - Your Login Credentials"
+                welcome_message = (
+                    f"Dear {name},\n\n"
+                    "Congratulations and welcome to the Educational Companion App!\n\n"
+                    "Your account has been created successfully. Please use the following credentials to log in:\n\n"
+                    f"Email: {email}\n"
+                    f"Password: {password}\n\n"
+                    "For security, please change your password after your first login.\n\n"
+                    "Best regards,\n"
+                    "Smart Educational System Team"
+                )
+                email_sent = send_email(
+                    recipients=[email],
+                    subject=welcome_subject,
+                    message=welcome_message,
+                    email_type="welcome_credentials"
+                )
+                if not email_sent:
+                    email_error = "Failed to send welcome email"
+            except Exception as exc:
+                email_sent = False
+                email_error = str(exc)
+                print(f"⚠️ Failed to send welcome email to {email}: {exc}")
         
         return jsonify({
             'success': True,
             'message': 'Student registered successfully',
             'student_id': str(result.inserted_id),
+            'course': course,
+            'collection': COURSE_COLLECTIONS.get(course, ''),
+            'registration_number': registration_number,
+            'email_sent': email_sent,
+            'email_error': email_error,
             'student': {
                 'name': name,
                 'email': email,
+                'registration_number': registration_number,
                 'notification_count': 0,
                 'notification_limit': NOTIFICATION_LIMIT
             }

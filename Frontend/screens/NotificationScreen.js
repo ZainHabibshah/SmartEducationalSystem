@@ -220,7 +220,7 @@ export default function NotificationScreen() {
             }
         } catch (error) {
             console.error('Error sending notification:', error);
-            setErrorText(error?.message || 'Failed to send notification. Please try again.');
+            setErrorText(error?.error || error?.message || 'Failed to send notification. Please try again.');
             setShowError(true);
         } finally {
             setSending(false);

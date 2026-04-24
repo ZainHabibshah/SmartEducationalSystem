@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import apiService from '../../services/apiService';
@@ -29,16 +30,37 @@ export default function AssignTeacherScreen() {
   const [saving, setSaving] = useState(false);
   const [loadingCurrent, setLoadingCurrent] = useState(false);
   const [currentTeacher, setCurrentTeacher] = useState(null);
+  const [teacherLoadError, setTeacherLoadError] = useState('');
 
   const courseLabel = useMemo(() => COURSE_OPTIONS.find((c) => c.value === course)?.label || course, [course]);
 
+  const normalizeTeacher = (res) => {
+    const candidate =
+      res?.teacher ||
+      res?.data?.teacher ||
+      res?.current_teacher ||
+      res?.data?.current_teacher ||
+      res?.admin ||
+      res?.data?.admin ||
+      null;
+
+    if (!candidate || typeof candidate !== 'object') return null;
+
+    return {
+      name: candidate.name || candidate.full_name || candidate.fullName || 'N/A',
+      email: candidate.email || 'N/A',
+    };
+  };
+
   const loadCurrentTeacher = async (targetCourse = course) => {
     setLoadingCurrent(true);
+    setTeacherLoadError('');
     try {
       const res = await apiService.getCourseTeacher(targetCourse);
-      setCurrentTeacher(res?.teacher || null);
-    } catch {
+      setCurrentTeacher(normalizeTeacher(res));
+    } catch (e) {
       setCurrentTeacher(null);
+      setTeacherLoadError(e?.error || e?.message || 'Failed to load teacher details.');
     } finally {
       setLoadingCurrent(false);
     }
@@ -47,6 +69,12 @@ export default function AssignTeacherScreen() {
   React.useEffect(() => {
     loadCurrentTeacher(course);
   }, [course]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      loadCurrentTeacher(course);
+    }, [course])
+  );
 
   const submit = async () => {
     if (!name.trim() || !email.trim() || !password) {
@@ -154,6 +182,9 @@ export default function AssignTeacherScreen() {
           ) : (
             <Text style={styles.currentText}>No teacher assigned yet.</Text>
           )}
+          {!!teacherLoadError && !loadingCurrent && (
+            <Text style={styles.currentErrorText}>{teacherLoadError}</Text>
+          )}
         </View>
 
         <TouchableOpacity style={styles.button} onPress={submit} activeOpacity={0.9} disabled={saving}>
@@ -243,6 +274,11 @@ const styles = StyleSheet.create({
     fontFamily: 'Outfit',
     color: COLORS.link,
     marginBottom: 4,
+  },
+  currentErrorText: {
+    fontFamily: 'Outfit',
+    color: '#C62828',
+    marginTop: 6,
   },
 });
 

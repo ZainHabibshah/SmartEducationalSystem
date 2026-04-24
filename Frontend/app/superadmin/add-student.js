@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import UploadConfirmationModal from '../../components/UploadConfirmationModal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS } from '../../constants/colors';
 import apiService from '../../services/apiService';
@@ -12,18 +13,44 @@ export default function SuperadminAddStudent() {
   const { course = 'computerScience' } = useLocalSearchParams();
   const [form, setForm] = useState({ fullName: '', fatherName: '', address: '', pastSchool: '', phone: '', email: '', password: '' });
   const [saving, setSaving] = useState(false);
+  const [showConfirmationModal, setShowConfirmationModal] = useState(false);
+  const [confirmationVariant, setConfirmationVariant] = useState('success');
+  const [confirmationTitle, setConfirmationTitle] = useState('Student Added Successfully');
+  const [confirmationMessage, setConfirmationMessage] = useState('Student has been added successfully.');
 
   const setField = (k, v) => setForm((p) => ({ ...p, [k]: v }));
+  const selectedCourse = Array.isArray(course) ? course[0] : course;
+  const courseKey = String(selectedCourse || 'computerScience');
+
+  const showErrorModal = (message) => {
+    setConfirmationVariant('error');
+    setConfirmationTitle('Submission Rejected');
+    setConfirmationMessage(message);
+    setShowConfirmationModal(true);
+  };
 
   const submit = async () => {
     if (!form.fullName || !form.fatherName || !form.email || !form.phone || !form.password) {
-      Alert.alert('Error', 'Please fill all required fields');
+      showErrorModal('Please fill all required fields (Full Name, Father Name, Email, Phone, Password).');
       return;
     }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(form.email.trim())) {
+      showErrorModal('Please enter a valid email address.');
+      return;
+    }
+
+    const phoneRegex = /^\+?\d{10,15}$/;
+    if (!phoneRegex.test(form.phone.trim())) {
+      showErrorModal('Please enter a valid phone number (10 to 15 digits, optional +).');
+      return;
+    }
+
     setSaving(true);
     try {
-      await apiService.registerStudentBySuperadmin({
-        course: String(course),
+      const response = await apiService.registerStudentBySuperadmin({
+        course: courseKey,
         full_name: form.fullName.trim(),
         father_name: form.fatherName.trim(),
         address: form.address.trim(),
@@ -32,12 +59,27 @@ export default function SuperadminAddStudent() {
         email: form.email.trim(),
         password: form.password,
       });
-      Alert.alert('Success', 'Student added successfully');
-      router.replace(`/superadmin/students?course=${String(course)}`);
+
+      setConfirmationVariant('success');
+      setConfirmationTitle('Student Added Successfully');
+      setConfirmationMessage(
+        response?.registration_number
+          ? `Student has been added to ${courseKey}.\nRegistration No: ${response.registration_number}`
+          : `Student has been added to ${courseKey} successfully.`
+      );
+      setShowConfirmationModal(true);
     } catch (error) {
-      Alert.alert('Error', error?.error || error?.message || 'Failed to add student');
+      showErrorModal(error?.error || error?.message || 'Failed to add student');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleConfirmationClose = () => {
+    const wasSuccess = confirmationVariant === 'success';
+    setShowConfirmationModal(false);
+    if (wasSuccess) {
+      router.replace(`/superadmin/students?course=${courseKey}`);
     }
   };
 
@@ -76,6 +118,15 @@ export default function SuperadminAddStudent() {
           <Text style={styles.submitText}>{saving ? 'Saving...' : 'Add Student'}</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      <UploadConfirmationModal
+        visible={showConfirmationModal}
+        onClose={handleConfirmationClose}
+        title={confirmationTitle}
+        message={confirmationMessage}
+        operationType="add"
+        variant={confirmationVariant}
+      />
     </View>
   );
 }

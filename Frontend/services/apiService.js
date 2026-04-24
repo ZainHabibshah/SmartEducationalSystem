@@ -409,6 +409,8 @@ class ApiService {
         title,
         message,
         course,
+      }, {
+        timeout: 30000,
       });
       return result;
     } catch (error) {
@@ -424,6 +426,8 @@ class ApiService {
         title,
         message,
         course,
+      }, {
+        timeout: 30000,
       });
       return result;
     } catch (error) {
@@ -448,6 +452,8 @@ class ApiService {
         course,
         title,
         message,
+      }, {
+        timeout: 30000,
       });
       return result;
     } catch (error) {
@@ -1124,7 +1130,22 @@ class ApiService {
   }
 
   async registerStudentBySuperadmin(payload) {
-    return await this.axiosInstance.post('/auth/superadmin/register-student', payload);
+    try {
+      return await this.axiosInstance.post('/auth/superadmin/register-student', payload, {
+        timeout: 30000,
+      });
+    } catch (error) {
+      const status = error?.status;
+      // Fallback for environments where superadmin auth route is unavailable.
+      if (status === 404 || status === 405) {
+        const course = payload?.course || 'computerScience';
+        return await this.axiosInstance.post('/api/notifications/register-student', payload, {
+          params: { course },
+          timeout: 30000,
+        });
+      }
+      throw error;
+    }
   }
 
   async updateStudentBySuperadmin(studentId, payload) {
