@@ -1,10 +1,18 @@
 # check_database.py
+import os
+from dotenv import load_dotenv
 from pymongo import MongoClient
+
+load_dotenv()
 
 def check_database():
     # Your MongoDB Atlas connection
-    client = MongoClient("mongodb+srv://Luffy:hab1457@ses.wmweowm.mongodb.net/")
-    db = client["smart_app_db"]
+    mongo_uri = os.getenv("MONGODB_URI", "").strip()
+    if not mongo_uri:
+        raise ValueError("MONGODB_URI is not defined. Add it to Backend/.env or your environment.")
+    client = MongoClient(mongo_uri)
+    db_name = os.getenv("MONGODB_DB_NAME", "smart_app_db").strip() or "smart_app_db"
+    db = client[db_name]
     
     print("🔍 Checking database contents...")
     

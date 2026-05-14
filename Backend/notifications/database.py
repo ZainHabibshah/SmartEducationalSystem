@@ -1,6 +1,11 @@
 # database.py
+import os
+import certifi
+from dotenv import load_dotenv
 from pymongo import MongoClient, ASCENDING
 from flask_pymongo import PyMongo
+
+load_dotenv()
 
 # Initialize PyMongo
 mongo = PyMongo()
@@ -15,9 +20,7 @@ def init_db(app):
     - If you want to use `flask_pymongo` elsewhere, update the URI below
       accordingly.
     """
-    # Keep a reasonable default for flask_pymongo; direct connections below
-    # use the Atlas cluster instead.
-    app.config["MONGO_URI"] = "mongodb://localhost:27017/EducationalAppData"
+    app.config["MONGO_URI"] = os.getenv("MONGODB_URI", "mongodb://localhost:27017/EducationalAppData").strip()
     mongo.init_app(app)
     return mongo
 
@@ -32,10 +35,13 @@ def connect_to_mongodb():
     already exists in your Atlas database.
     """
     try:
-        # Same URI / DB name used in `check_database.py`
-        client = MongoClient("mongodb+srv://Luffy:hab1457@ses.wmweowm.mongodb.net/")
-        db = client["smart_app_db"]
-        print("✅ Connected to MongoDB 'smart_app_db' successfully!")
+        mongo_uri = os.getenv("MONGODB_URI", "").strip()
+        if not mongo_uri:
+            raise ValueError("MONGODB_URI is not defined. Add it to Backend/.env or your environment.")
+        db_name = os.getenv("MONGODB_DB_NAME", "smart_app_db").strip() or "smart_app_db"
+        client = MongoClient(mongo_uri, tls=True, tlsCAFile=certifi.where())
+        db = client[db_name]
+        print(f"✅ Connected to MongoDB '{db_name}' successfully!")
 
         # Verify collections exist and show counts
         admin_count = db.admin.count_documents({})

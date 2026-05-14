@@ -53,11 +53,12 @@ def connect_to_mongodb():
         mongo_uri = (
             os.getenv("MONGODB_URI", "").strip()
             or os.getenv("MONGOODB_URI", "").strip()
-            or "mongodb+srv://Luffy:hab1457@ses.wmweowm.mongodb.net/"
         )
         db_name = os.getenv("MONGODB_DB_NAME", "smart_app_db").strip() or "smart_app_db"
-        if "Luffy:hab1457" in mongo_uri:
-            print("⚠️ Using fallback MongoDB URI from source code. Set MONGODB_URI in environment for production.")
+        if not mongo_uri:
+            raise ValueError(
+                "MONGODB_URI is not configured. Set it in Backend/.env or as an environment variable."
+            )
 
         # Build a fresh client for each request to avoid stale sockets that can
         # hang login attempts for a long time on unstable networks.

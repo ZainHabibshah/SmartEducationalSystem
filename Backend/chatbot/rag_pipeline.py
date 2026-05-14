@@ -120,7 +120,7 @@ EMBEDDING_MODEL_NAME = "BAAI/bge-base-en-v1.5"
 # Groq model id (override with GROQ_CHAT_MODEL in .env).
 # Use a stronger default model for better timetable Q&A quality.
 GROQ_CHAT_MODEL = os.getenv("GROQ_CHAT_MODEL", "llama-3.3-70b-versatile")
-GROQ_CHAT_COMPLETIONS_URL = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_CHAT_COMPLETIONS_URL = os.get("GROQ_CHAT_COMPLETION_URL")
 GROQ_TIMETABLE_VISION_MODEL = os.getenv(
     "GROQ_TIMETABLE_VISION_MODEL",
     "meta-llama/llama-4-scout-17b-16e-instruct",
