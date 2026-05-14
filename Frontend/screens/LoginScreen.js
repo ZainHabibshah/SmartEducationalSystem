@@ -43,7 +43,7 @@ export default function LoginScreen() {
   const roleOptions = [
     { label: 'Student', value: 'student' },
     { label: 'Teacher', value: 'admin' },          // backend role = 'admin' (teacher)
-    { label: 'Super Admin', value: 'superadmin' },
+    { label: 'Admin', value: 'superadmin' },
   ];
 
   const isValidEmail = (value) => {
