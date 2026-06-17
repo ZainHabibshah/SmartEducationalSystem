@@ -4,7 +4,7 @@ from pymongo import MongoClient
 
 def check_database():
     # MongoDB Atlas connection
-    client = MongoClient("mongodb+srv://Luffy:hab1457@ses.wmweowm.mongodb.net/")
+    client = MongoClient("PROCESS.env.dbCredentials)
     db = client["smart_app_db"]
 
     print("🔍 Checking database contents...")
