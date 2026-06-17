@@ -53,7 +53,6 @@ def connect_to_mongodb():
         mongo_uri = (
             os.getenv("MONGODB_URI", "").strip()
             or os.getenv("MONGOODB_URI", "").strip()
-            or "mongodb+srv://Luffy:hab1457@ses.wmweowm.mongodb.net/"
         )
         db_name = os.getenv("MONGODB_DB_NAME", "smart_app_db").strip() or "smart_app_db"
         if "Luffy:hab1457" in mongo_uri:
